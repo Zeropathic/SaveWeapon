@@ -1,0 +1,11 @@
+mod = [
+	"SaveWeapon"
+]
+
+package = [
+	"resource_packages/SaveWeapon/SaveWeapon"
+]
+
+lua = [
+	"scripts/mods/SaveWeapon/*"
+]
