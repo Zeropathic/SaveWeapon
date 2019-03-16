@@ -1,12 +1,21 @@
-local mod = get_mod("SaveWeapon")
+--[[
 
--- luacheck: globals get_mod fassert HeroView Managers UIResolutionScale UIResolution InventorySettings
--- luacheck: globals WeaponProperties WeaponTraits WeaponSkins table ItemMasterList SPProfiles Localize
--- luacheck: globals ItemHelper UIUtils HeroWindowLoadoutInventory
+	================
+	= SAVE WEAPONS =
+	================
+
+	 v. 0.02
+
+]]--
+
+
+local mod = get_mod("SaveWeapon")
 
 
 -- I'm not sure what this is, but I need it for an if-check in the GiveWeapon hook function or longbows will cause trouble.
 local pl = require'pl.import_into'()
+
+mod:dofile("scripts/mods/SaveWeapon/NameReferenceList")
 
 --
 mod.give_weapon = get_mod("GiveWeapon")
@@ -70,6 +79,8 @@ saved_items = [
 	Maybe I should put a hard cap at 2 properties, but GiveWeapon doesn't so for now I didn't bother. Theoretically you could have one of each property.
 ]]--
 
+
+
 mod.separate_strings = function(item_string)
 	local item_strings = {}
 	
@@ -78,9 +89,9 @@ mod.separate_strings = function(item_string)
 		table.insert(item_strings, w)
 	end
 	
-	for i = 1, #item_strings do
+	--for i = 1, #item_strings do
 		--mod:echo(item_strings[i])
-	end
+	--end
 	
 	return item_strings
 end
@@ -100,7 +111,7 @@ mod.load_items = function()
 		local name = item_strings[1]
 		local skin = item_strings[2]
 		
-		local trait = { item_strings[3] }
+		local trait = { mod.trait_name_short2long(item_strings[3]) } -- Convert the shortened trait name back to its full name
 		local custom_traits = '[\"' .. item_strings[3] .. '\",]'
 		
 		local properties = {}
@@ -153,7 +164,7 @@ mod.load_items = function()
 		--mod:echo(i)
 	end
 	
-	mod:echo("Items loaded.")
+	mod:echo("SaveWeapon: " .. #mod.saved_items .. " items loaded.")
 end
 
 -- Forcibly load items with "/saveweapon_load"
@@ -162,15 +173,17 @@ mod:command("saveweapon_load", "Load all saved GiveWeapon items", function()
 	mod.load_items()
 end)
 
--- Load weapons on game start
-mod.on_all_mods_loaded = function()
-	-- Check to prevent it from spamming your inventory if the mod is reloaded
-	if not rawget(_G, "SaveWeapon_OnStartup_Loaded") then
+-- Load weapons roughly on game start
+-- Need to use this rather than on mods loaded since some of the game stuff used isn't available yet
+mod.on_game_state_changed = function(status, state_name)
+	if status == "enter" 
+	and state_name == "StateIngame" 
+	and not rawget(_G, "SaveWeapon_OnStartup_Loaded")
+	then
 		mod.load_items()
 		rawset(_G, "SaveWeapon_OnStartup_Loaded", true)
 	end
 end
-
 
 
 --[[	____________
@@ -182,13 +195,11 @@ end
 mod.generate_item_string = function(name, skin, traits, properties)
 	local item_string = name
 	
-	if skin then -- If the item is a weapon it will have a skin; if not it won't
-		--skin = skin:sub(name:len() + 2)
-		item_string = item_string .. "/" .. skin
-	end
+	item_string = item_string .. "/" .. skin -- Will be "nil" for necklace/charm/trinket
 
+	-- Hypothetically this loop could give me multiple trait strings, but since GiveWeapon doesn't support multiple traits it won't happen.
 	for _, trait_name in ipairs(traits) do
-		item_string = item_string .. "/" .. trait_name
+		item_string = item_string .. "/" .. mod.trait_name_long2short(trait_name) -- Shorten trait name to a more concise string
 	end
 	
 	for _, prop_name in ipairs(properties) do
@@ -206,8 +217,6 @@ mod.save_item = function(name, skin, traits, properties)
 	
 	table.insert(mod.saved_items, 1, item_string)
 	table.sort(mod.saved_items)
-	
-	mod.entry_from_string(item_string)
 	
 	mod:set("saved_items", mod.saved_items)
 end
