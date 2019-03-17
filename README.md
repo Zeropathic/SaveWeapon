@@ -12,5 +12,9 @@ The items in this list are loaded/created on game start. The command "/saveweapo
 # Changelog
 
 **Version 0.02**
-  - Automatic load on game start now works
-  - The savestring trait name is shortened. Example: "melee_attack_speed_on_crit" becomes "swift_slaying".
+ - Automatic load on game start now works
+ - The savestring trait name is shortened. Example: "melee_attack_speed_on_crit" becomes "swift_slaying"
+
+**Version 0.03**
+ - NameReferenceList.lua is gone. Functionality moved to the new SaveWeapon_utilities.lua
+ - Saved item strings are now checked for errors when loaded
