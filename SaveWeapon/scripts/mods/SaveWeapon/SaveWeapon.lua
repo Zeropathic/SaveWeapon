@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.02
+	 v. 0.03
 
 ]]--
 
@@ -12,10 +12,11 @@
 local mod = get_mod("SaveWeapon")
 
 
--- I'm not sure what this is, but I need it for an if-check in the GiveWeapon hook function or longbows will cause trouble.
+-- Penlight, I guess?
+-- Used for an if-check I copied from GiveWeapon, used in the GiveWeapon hook function.
 local pl = require'pl.import_into'()
 
-mod:dofile("scripts/mods/SaveWeapon/NameReferenceList")
+mod:dofile("scripts/mods/SaveWeapon/SaveWeapon_utilities")
 
 --
 mod.give_weapon = get_mod("GiveWeapon")
@@ -28,12 +29,10 @@ fassert(mod.more_items_library, "SaveWeapon must be lower than MoreItemsLibrary 
 --
 
 mod.saved_items = {}
-
 -- Create user_settings.config entry if there isn't one
 if not mod:get("saved_items") then
 	mod:set("saved_items", mod.saved_items)
 end
-
 mod.saved_items = mod:get("saved_items")
 
 
@@ -41,9 +40,6 @@ mod.saved_items = mod:get("saved_items")
 --[[
 
 weapon_name + illusion + trait + property...
-
-(Illusion name can be shortened since the start of it seems to always be the same as the weapon name)
-WRONG: Illusion name prefix doesn't always correspond with weapon name - full illusion string required (that or some reference table)
 
 Readable and relatively intuitive for manual editing (syntax pending)
 
@@ -103,68 +99,94 @@ mod.load_items = function()
 	
 	mod.saved_items = mod:get("saved_items")
 	
-	local item_strings
+	local items_loaded = 0
+	local items_failed_to_load = 0
+	
 	for i = 1, #mod.saved_items do
-		item_strings = mod.separate_strings(mod.saved_items[i])
+	
+		-- # NEED TO PUT SOME SAFETY CHECKS IN PLACE # --
+	
+		local item_strings = mod.separate_strings(mod.saved_items[i])
+		item_strings[3] = mod.trait_name_short2long(item_strings[3]) -- Convert shortened trait name back to its full name
 		
-		-- Trying to more or less copy how GiveWeapon uses the items library thing, I don't really know what I'm doing
-		local name = item_strings[1]
-		local skin = item_strings[2]
-		
-		local trait = { mod.trait_name_short2long(item_strings[3]) } -- Convert the shortened trait name back to its full name
-		local custom_traits = '[\"' .. item_strings[3] .. '\",]'
-		
-		local properties = {}
+		local prop_check = true
 		for i = 4, #item_strings do
-			properties[item_strings[i]] = 1
+			if not mod.is_property_key_valid(item_strings[i]) then
+				prop_check = false
+			end
 		end
-		local custom_properties = "{"
-		for i = 4, #item_strings do
-			custom_properties = custom_properties..'\"' .. item_strings[i] .. '\":1,'
-		end
-		custom_properties = custom_properties .. "}"
-
 		
-		
-		-- Dunno how to use this thing but let's try
-		local rnd = math.random(1000000) -- uhh yeah
-		local new_backend_id =  tostring(name) .. "_" .. rnd .. "_from_SaveWeapon"
-		local entry = table.clone(ItemMasterList[name])
-		entry.mod_data = {
-			backend_id = new_backend_id,
-			ItemInstanceId = new_backend_id,
-			CustomData = {
-				-- traits = "[\"melee_attack_speed_on_crit\", \"melee_timed_block_cost\"]",
-				traits = custom_traits,
-				power_level = "300",
-				properties = custom_properties,
+		if mod.is_item_key_valid(item_strings[1])
+		and mod.is_skin_key_valid(item_strings[2], item_strings[1])
+		and mod.is_trait_key_valid(item_strings[3])
+		and prop_check
+		then
+			
+			-- Trying to more or less copy how GiveWeapon uses the items library thing, I don't really know what I'm doing
+			local name = item_strings[1]
+			local skin = item_strings[2]
+			
+			local trait = { item_strings[3] }
+			local custom_traits = '[\"' .. item_strings[3] .. '\",]'
+			
+			local properties = {}
+			for i = 4, #item_strings do
+				properties[item_strings[i]] = 1
+			end
+			local custom_properties = "{"
+			for i = 4, #item_strings do
+				custom_properties = custom_properties..'\"' .. item_strings[i] .. '\":1,'
+			end
+			custom_properties = custom_properties .. "}"
+			
+			-- Dunno how to use this thing but let's try
+			-- This bit is more or less copied from GiveWeapon
+			local rnd = math.random(1000000) -- uhh yeah
+			local new_backend_id =  tostring(name) .. "_" .. rnd .. "_from_SaveWeapon"
+			local entry = table.clone(ItemMasterList[name])
+			entry.mod_data = {
+				backend_id = new_backend_id,
+				ItemInstanceId = new_backend_id,
+				CustomData = {
+					-- traits = "[\"melee_attack_speed_on_crit\", \"melee_timed_block_cost\"]",
+					traits = custom_traits,
+					power_level = "300",
+					properties = custom_properties,
+					rarity = "exotic",
+				},
 				rarity = "exotic",
-			},
-			rarity = "exotic",
-			-- traits = { "melee_timed_block_cost", "melee_attack_speed_on_crit" },
-			traits = table.clone(trait),
-			power_level = 300,
-			properties = properties,
-		}
-		if skin ~= "nil" then
-			entry.mod_data.CustomData.skin = skin
-			entry.mod_data.skin = skin
-			entry.mod_data.inventory_icon = WeaponSkins.skins[skin].inventory_icon
+				-- traits = { "melee_timed_block_cost", "melee_attack_speed_on_crit" },
+				traits = table.clone(trait),
+				power_level = 300,
+				properties = properties,
+			}
+			if skin ~= "nil" then
+				entry.mod_data.CustomData.skin = skin
+				entry.mod_data.skin = skin
+				entry.mod_data.inventory_icon = WeaponSkins.skins[skin].inventory_icon
+			end
+			
+			entry.rarity = "exotic"
+
+			entry.rarity = "default"
+			entry.mod_data.rarity = "default"
+			entry.mod_data.CustomData.rarity = "default"
+
+			mod.more_items_library:add_mod_items_to_local_backend({entry}, "SaveWeapon")
+			Managers.backend:get_interface("items"):_refresh()
+			
+			items_loaded = items_loaded + 1
+		else
+			items_failed_to_load = items_failed_to_load + 1
+			mod:echo('[ERROR: SaveWeapon] Failed to load item \"' .. item_strings[1] .. '\"')
 		end
-		
-		entry.rarity = "exotic"
-
-		entry.rarity = "default"
-		entry.mod_data.rarity = "default"
-		entry.mod_data.CustomData.rarity = "default"
-
-		mod.more_items_library:add_mod_items_to_local_backend({entry}, "SaveWeapon")
-		Managers.backend:get_interface("items"):_refresh()
-		
-		--mod:echo(i)
 	end
 	
-	mod:echo("SaveWeapon: " .. #mod.saved_items .. " items loaded.")
+	if items_failed_to_load == 0 then
+		mod:echo("SaveWeapon: " .. items_loaded .. " items loaded")
+	else
+		mod:echo("SaveWeapon: " .. items_loaded .. " items loaded / " .. items_failed_to_load .. " items failed to load")
+	end
 end
 
 -- Forcibly load items with "/saveweapon_load"
