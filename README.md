@@ -1,4 +1,4 @@
-# SaveWeapon-WIP
+# SaveWeapon Beta
 Mod that can save weapons that have been created using GiveWeapon.
 
 Has bare bones functionality: when an item is created using GiveWeapon, it's saved in: 
