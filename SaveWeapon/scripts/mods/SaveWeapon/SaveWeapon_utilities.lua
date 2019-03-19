@@ -4,6 +4,33 @@
 	= SAVE WEAPONS - UTILITY FUNCTIONS =
 	====================================
 
+
+	This file contains various utility functions that the mod uses.
+	
+	They're kept separate from the main file to reduce clutter.
+
+
+	Index:
+	¯¯¯¯¯
+	 # STRING UTILITIES #
+		trait_name_long2short 		(name)
+		trait_name_short2long 		(name)
+		separate_item_string  		(item_string)
+		generate_item_string  		(name, skin, traits, properties)
+		savestring_set_favorite		(savestring, is_favorite)
+		
+	 # STRING KEY CHECKS #
+		is_item_key_valid 	  		(item_key)
+		is_skin_key_valid 	  		(skin_key, item_key)
+		is_trait_key_valid 	  		(trait_key)
+		is_property_key_valid 		(prop_key)
+		
+	 # BACKEND ID UTILITIES #
+		get_backend_id_suffix 	   	(backend_id)
+		is_backend_id_from_mod 	   	(backend_id)
+		get_backend_save_id 	   	(backend_id)
+		get_item_name_from_save_id 	(save_id)
+	
 ]]--
 
 local mod = get_mod("SaveWeapon")
@@ -51,9 +78,9 @@ mod.trait_name_table = {
 
 
 
---	_________________
---	STRING CONVERTERS
---	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+--	____________________
+--	# STRING UTILITIES #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 -- Takes a long name and returns a shortened one.
 -- Example: "melee_attack_speed_on_crit" returns "swift_slaying"
@@ -73,20 +100,64 @@ mod.trait_name_short2long = function(name)
 	return name
 end
 
---[[ 
--- Quick tests
-local test_string = "melee_shield_on_assist"
-mod:echo('\"'.. test_string .. '\" -> ' .. mod.trait_name_long2short(test_string))
-
-test_string = "heat_sink"
-mod:echo('\"'.. test_string .. '\" -> ' .. mod.trait_name_short2long(test_string))
+-- # PARSE SAVESTRING
+-- The savestring is converted into an array, which looks like this:
+--[[
+	Saved item array anatomy:
+		[1] = is favorite (true/false)
+		[2] = skin name (Accessories use "nil" here)
+		[3] = trait name
+		[4] = property 1
+		[5] = property 2
+		[6] = property 3... and so on
 ]]--
+mod.separate_item_string = function(item_string)
+	local item_strings = {}
+	
+	for w in string.gmatch(item_string, "[^/]+") do
+		--mod:echo(w)
+		table.insert(item_strings, w)
+	end
+	
+	return item_strings
+end
+
+-- # GENERATE SAVESTRING
+-- Generates a string for saving the item with
+-- It'll look something like this: "false/es_1h_mace_skin_02/swift_slaying/crit_chance/attack_speed"
+mod.generate_item_string = function(skin, trait, properties)
+	local item_string = "false" -- is favorite, false by default
+	
+	item_string = item_string .. "/" .. skin -- Will be "nil" for necklace/charm/trinket
+
+	item_string = item_string .. "/" .. mod.trait_name_long2short(trait) -- Shorten trait name to a more concise string
+	
+	for _, prop_name in ipairs(properties) do
+		item_string = item_string .. "/" .. prop_name
+	end
+	
+	return item_string
+end
+
+-- # CHANGE SAVESTRING FAVORITE FIELD
+-- Sets the favorite field in the savestring to true or false and returns the new string
+mod.savestring_set_favorite = function(savestring, is_favorite)
+	local item_strings = mod.separate_item_string(savestring)
+	item_strings[1] = tostring(is_favorite)
+	local new_savestring = ""
+	for _, str in pairs(item_strings) do
+		if new_savestring ~= "" then
+			new_savestring = new_savestring .. "/"
+		end
+		new_savestring = new_savestring .. str
+	end
+	return new_savestring
+end
 
 
-
---	_________________
---	STRING KEY CHECKS
---	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+--	_____________________
+--	# STRING KEY CHECKS #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 -- # ITEM KEY CHECK # --
 -- Takes item name (i.e. "es_1h_mace") and runs a check to see if an entry exists in ItemMasterList.
@@ -165,4 +236,55 @@ mod.is_skin_key_valid(skin_key, item_key)
 mod.is_trait_key_valid(trait_key)
 mod.is_property_key_valid(prop_key)
 ]]--
+
+
+--	________________________
+--	# BACKEND ID UTILITIES #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+-- Items created with GiveWeapon or SaveWeapon have a suffix appended to their backend IDs
+-- 	"_from_GiveWeapon"
+--	"_from_SaveWeapon"
+-- This function takes the backend ID and returns this string, or an empty string if there is no suffix.
+mod.get_backend_id_suffix = function(backend_id)
+	local suffix = string.match(backend_id, "_from_GiveWeapon")
+	if not suffix then
+		suffix = string.match(backend_id, "_from_SaveWeapon")
+		if not suffix then
+			suffix = ""
+		end
+	end
+	--mod:echo('suffix = \"' .. suffix .. '\"')
+	return suffix
+end
+
+-- Checks if a backend ID is from either the SaveWeapon or GiveWeapon mods and returns a boolean accordingly.
+mod.is_backend_id_from_mod = function(backend_id)
+	local suffix = mod.get_backend_id_suffix(backend_id)
+	if suffix == "_from_GiveWeapon" or suffix == "_from_SaveWeapon" then
+		return true
+	end
+	return false
+end
+
+-- Returns the backend ID string of a created item without the suffix
+mod.get_backend_save_id = function(backend_id)
+	local save_id = backend_id
+	if get_backend_id_suffix ~= "" then
+		local suffix_len = string.len("_from_GiveWeapon") -- SaveWeapon and GiveWeapon are conveniently the same length
+		save_id = string.sub(save_id, 1, string.len(save_id) - suffix_len)
+	end
+	return save_id
+end
+
+-- This one takes a save ID and returns the weapon name
+mod.get_item_name_from_save_id = function(save_id)
+	for key, _ in pairs(ItemMasterList) do
+		item_name = string.match(save_id, key)
+		if item_name then
+			return item_name
+		end
+	end
+	return ""
+end
 
