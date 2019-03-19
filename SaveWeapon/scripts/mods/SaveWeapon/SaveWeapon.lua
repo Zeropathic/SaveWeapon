@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.04
+	 v. 0.05
 
 
 
@@ -213,7 +213,9 @@ mod.load_items = function()
 	
 	-- A little message telling the player how many items were loaded.
 	if items_failed_to_load == 0 then
-		mod:echo("SaveWeapon: " .. items_loaded .. " items loaded")
+		if items_loaded > 0 then
+			mod:echo("SaveWeapon: " .. items_loaded .. " items loaded")
+		end
 	else
 		mod:echo("SaveWeapon: " .. items_loaded .. " items loaded / " .. items_failed_to_load .. " failed")
 	end
@@ -346,8 +348,12 @@ mod:hook_safe(mod.more_items_library, "add_mod_items_to_local_backend", function
 				-- Eventually I want some mod settings to control whether items are autosaved
 				-- For now, any item created by GiveWeapon is saved automatically
 				local backend_id = item.mod_data.backend_id
-				mod.save_item(backend_id, savestring)
+				--mod.save_item(backend_id, savestring)
+				--mod:echo("saved item " .. backend_id)
 			end
+			
+			--mod:echo("item.name = " .. name)
+			--mod:echo("backend_id = " .. item.mod_data.backend_id)
 			
 			-- Track created items by adding them to a table. This gets wiped when you quit the game.
 			table.insert(mod.created_items, 1, item.mod_data.backend_id)

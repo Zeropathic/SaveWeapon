@@ -128,8 +128,12 @@ end
 mod.generate_item_string = function(skin, trait, properties)
 	local item_string = "false" -- is favorite, false by default
 	
-	item_string = item_string .. "/" .. skin -- Will be "nil" for necklace/charm/trinket
-
+	if skin == nil then
+		item_string = item_string .. "/" .. "nil" -- Will be "nil" for necklace/charm/trinket
+	else
+		item_string = item_string .. "/" .. skin
+	end
+	
 	item_string = item_string .. "/" .. mod.trait_name_long2short(trait) -- Shorten trait name to a more concise string
 	
 	for _, prop_name in ipairs(properties) do
@@ -182,9 +186,27 @@ mod.is_item_key_valid = function(item_key)
 	return false
 end
 
+mod.is_item_accessory = function(item_key)
+	for key, item in pairs(ItemMasterList) do
+		if key == item_key then
+			if item.slot_type == "necklace"
+			or item.slot_type == "ring"
+			or item.slot_type == "trinket"
+			then
+				return true
+			end
+			return false
+		end
+	end
+	return false
+end
+
 -- # SKIN KEY CHECK # --
 -- Takes skin name (i.e. "es_1h_mace_skin_02") and item name (i.e. "es_1h_mace") and runs a check to see if they match.
 mod.is_skin_key_valid = function(skin_key, item_key)
+	if skin_key == "nil" and mod.is_item_accessory then
+		return true
+	end
 	-- Found this function in "weapon_skins.lua" that does the trick.
 	-- It checks whether a skin key matches a weapon key and returns a boolean accordingly.
 	local b = WeaponSkins.is_matching_skin(item_key, skin_key)
