@@ -11,10 +11,16 @@ The items in this list are loaded/created on game start. The command "/saveweapo
  
 # Changelog
 
-**Version 0.02**
- - Automatic load on game start now works
- - The savestring trait name is shortened. Example: "melee_attack_speed_on_crit" becomes "swift_slaying"
+**Version 0.04**
+ - "Mark as favorite" status of created items will now be remembered by the mod and applied to loaded items
+ - To support the favorite functionality, some changes have been made to the way the mod saves items
+ - Now hooks MoreItemsLibary's create function rather than GiveWeapon's; this offers more direct access to an item's data
+ - Moved some functions over to SaveWeapon_utilities.lua
 
 **Version 0.03**
  - NameReferenceList.lua is gone. Functionality moved to the new SaveWeapon_utilities.lua
  - Saved item strings are now checked for errors when loaded
+
+**Version 0.02**
+ - Automatic load on game start now works
+ - The savestring trait name is shortened. Example: "melee_attack_speed_on_crit" becomes "swift_slaying"
