@@ -11,6 +11,9 @@ The items in this list are loaded/created on game start. The command "/saveweapo
  
 # Changelog
 
+**Version 0.05**
+ - Fixed a bug that prevented accessories from being saved or loaded
+
 **Version 0.04**
  - "Mark as favorite" status of created items will now be remembered by the mod and applied to loaded items
  - To support the favorite functionality, some changes have been made to the way the mod saves items
