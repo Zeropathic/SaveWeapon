@@ -1,10 +1,15 @@
 # SaveWeapon Beta
 Mod that can save weapons that have been created using GiveWeapon.
 
+Command list (use in-game chat):
+ */sw_delete_last* (deletes last saved item entry)
+ */sw_delete_%item_name%* (auto-fill helps you) (deletes specified item's entry)
+ */sw_undo* (undoes last delete action)
+
 Has bare bones functionality: when an item is created using GiveWeapon, it's saved in: 
  - \Users\YourNameHere\AppData\Roaming\Fatshark\Vermintide 2\user_settings.config
 
-Open it and ctrl+f "saved_items". Manual deletion is currently the only way to clear or curate the list.
+Open it and ctrl+f "saved_items" to see your entries. Editing it while in-game is unlikely to work too well.
 
 The items in this list are loaded/created on game start. The command "/saveweapon_load" will also load/create the items in the list. There are currently no checks in place to ensure the same item isn't created multiple times.
  
@@ -12,7 +17,7 @@ The items in this list are loaded/created on game start. The command "/saveweapo
 # Changelog
 
 **Version 0.07**
- - Added chat commands /sw_delete_last, /sw_delete_%item_name% (auto-fill will help you), and /sw_undo
+ - Added chat commands */sw_delete_last*, */sw_delete_%item_name%* (auto-fill will help you), and */sw_undo*
 
 **Version 0.06**
  - Uncommented a line of code that was responsible for running the save function when an item was created (Oopsie)
