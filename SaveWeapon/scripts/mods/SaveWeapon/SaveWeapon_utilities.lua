@@ -114,6 +114,10 @@ end
 mod.separate_item_string = function(item_string)
 	local item_strings = {}
 	
+	if not item_string then
+		return {}
+	end
+	
 	for w in string.gmatch(item_string, "[^/]+") do
 		--mod:echo(w)
 		table.insert(item_strings, w)

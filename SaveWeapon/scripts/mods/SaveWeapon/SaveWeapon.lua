@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.06
+	 v. 0.07
 
 
 
@@ -15,21 +15,26 @@
 	 - Add a mod options menu
 		* Automatic load on startup ~ On/Off
 		* Save methods: automatic, manual, by favorite, whatever I can come up with
-	 - Some chat commands to give better control over save/load
-		* /save_last
-		* /delete_last (remove last save index from .config file)
-		* /destroy_last (remove the last item created by GiveWeapon from the game)
-		* /save/delete/destroy_equipped (do the thing with all equipped created items on current character)
-		  
-		  Some that I'm not sure how would work, but they're ideas:
-		* /import
-		* /export
-		* /share
+	 - (Sorta done) Some chat commands to give better control over save/load
 	 - (Done) Keep track of items created during current session, both from GiveWeapon and this mod
 	 - Using aforementioned track keeping:
 		* (Sorta done - loading an item overwrites the old copy) Check to prevent same item from being saved or loaded twice
 		* Some kind of utilities to offer better control over saving/loading/deleting created items (details pending)
 		* (Done ) Saving whether an item is marked as a Favorite and applying that status when it's loaded
+	 - Toggleable save-on-create UI element for the GiveWeapon UI
+	 - Save-on-hover in inventory
+		* Customizable hotkey (S by default, maybe)
+		* Graphic indicating item is saved over the icon? (small S in a corner?)
+		* Delete-on-hover hotkey? Possibly with a way to undo deletion (chat command "/sw_undo" or something)
+
+
+
+	List of commands:
+	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+	 /sw_load_all				-- Loads all saved items
+	 /sw_delete_last			-- Deletes the last created item
+	 /sw_delete_%weapon_name%	-- Deletes the specified item. If you start typing, autofill will kick in and you can choose one
+	 
 
 ]]--
 
@@ -68,33 +73,83 @@ if not mod.created_items then -- Contingency to prevent reloading the mods from 
 	mod.created_items = {}
 end
 
+-- When an item is saved, its backend_id is stored in this table.
+-- Index #1 is last saved
+if not mod.last_saved_items then
+	mod.last_saved_items = {}
+end
+
+-- When an item is deleted, its data is stored in this table.
+-- Index #1 is last deleted
+-- Stored tables look like this: 
+--		mod.deleted_items[1] = { save_id, savestring }
+if not mod.deleted_items then
+	mod.deleted_items = {}
+end
+
 
 --	_________________
 --	* CHAT COMMANDS *
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
---	/saveweapon_load
+--	/sw_load_all
 -- Forcibly loads your saved items, should you need to do so for whatever reason.
-mod:command("saveweapon_load", "Load all saved GiveWeapon items", function()
+-- There's a chance it might cause bugs with last saved/created items
+mod:command("sw_load_all", "Load all saved GiveWeapon items", function()
 	mod.load_items()
 end)
 
---[[
-mod:command("sw_delete_last", "Deletes the last created item from GiveWeapon from the game.", function()
-	
+--	/sw_delete_last
+-- Delete last saved item
+mod:command("sw_delete_last", "Deletes the last saved item from the game", function()
+	local backend_id = mod.last_saved_items[1]
+	if backend_id then
+		-- Remove generated delete chat command
+		local save_id = mod.get_backend_save_id(backend_id)
+		local command_name = "sw_delete_" .. save_id
+		mod:command_remove(command_name)
+		
+		-- Delete the saved entry and remove from created table
+		mod.delete_item(backend_id)
+	else
+		mod:echo("[Delete Last] Save list empty; nothing to delete")
+	end
 end)
-]]--
 
--- /sw_delete_%weapon_name%
+-- 	/sw_delete_%item_name%
+-- Creates a command named after the item. It's convenient to do it this way since it lets the user use VMF's auto fill functionality.
+-- Created commands will currently be lost if you reload the mod (rip)
 mod.add_delete_weapon_command = function(backend_id)
 	local item_id = mod.get_backend_save_id(backend_id)
 	local command_name = "sw_delete_" .. item_id
-	local command_description = ""
+	
+	local savestring = mod.separate_item_string(mod.saved_items[item_id])
+	local command_description = savestring[3]
+	for i = 4, #savestring do
+		command_description = command_description .. "/" .. savestring[i]
+	end
 	mod:command(command_name, command_description, function()
 		mod.delete_item(backend_id)
 		mod:command_remove(command_name)
 	end)
 end
+
+--	/sw_undo
+-- Undoes last delete action
+mod:command("sw_undo", "Undoes the last delete action", function()
+	local deleted_item = mod.deleted_items[1]
+	if deleted_item then
+		local backend_id = deleted_item.backend_id
+		local savestring = deleted_item.savestring
+		
+		mod.save_item(backend_id, savestring)
+		table.remove(mod.deleted_items, 1)
+		
+		mod:echo('[Undo Delete] \"' .. mod.get_backend_save_id(backend_id) .. '\" restored')
+	else
+		mod:echo("[Undo Delete] Nothing to undo; nothing has been deleted") 
+	end
+end)
 
 
 --	__________________
@@ -102,11 +157,32 @@ end
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 -- # Delete created item # --
--- Deletes a created item, both from your inventory and your save file.
--- Failsafes in place to make sure you don't mess with regular items.
+-- Deletes a created item, both from your inventory (well, not yet) and your save file.
 mod.delete_item = function(backend_id)
-	mod:echo('[delete_item] I was supposed to delete "' .. tostring(backend_id) .. '" here, but I\'m not sure I can yet.')
+	local save_id = mod.get_backend_save_id(backend_id)
+	local savestring = mod.saved_items[save_id]
+	local entry = {
+		backend_id = backend_id,
+		savestring = savestring,
+	}
+	table.insert(mod.deleted_items, 1, entry) -- Save last deleted info
+	
+	-- Remove item from last_saved_items table
+	for i, str in ipairs(mod.last_saved_items) do
+		if str == backend_id then
+			table.remove(mod.last_saved_items, i)
+			break
+		end
+	end
+	
+	mod.saved_items[save_id] = nil
+	mod:set("saved_items", mod.saved_items)
+	
+	--mod:echo('[delete_item] Entry "' .. tostring(backend_id) .. '" deleted from save file')
+	--mod:echo("Item is still in inventory, but it will not be loaded next time.")
+	
 	-- # Help me, Aussiemon, you're my only hope
+	-- MoreItemsLibrary currently doesn't have a way to remove an item
 end
 
 
@@ -241,6 +317,8 @@ mod.load_items = function()
 			end
 			
 			table.insert(mod.created_items, new_backend_id) -- Add backend ID to the list of items created this session
+			table.insert(mod.last_saved_items, new_backend_id) -- Add to last saved (want to include loaded items)
+			mod.add_delete_weapon_command(new_backend_id) -- Chat command to delete the specified item
 			
 			items_loaded = items_loaded + 1
 		else
@@ -281,9 +359,13 @@ end
 -- Saves the item in user_data.config
 mod.save_item = function(backend_id, savestring)
 	local save_id = mod.get_backend_save_id(backend_id)
+	
 	mod.saved_items[save_id] = savestring
 	table.sort(mod.saved_items)
 	mod:set("saved_items", mod.saved_items)
+	
+	table.insert(mod.last_saved_items, backend_id) -- Add to last saved
+	mod.add_delete_weapon_command(backend_id) -- Create a chat command to delete the specified item
 end
 
 -- # MoreItemsLibrary create item hook # --
@@ -337,6 +419,9 @@ mod:hook_safe(mod.more_items_library, "add_mod_items_to_local_backend", function
 			
 			-- Track created items by adding them to a table. This gets wiped when you quit the game.
 			table.insert(mod.created_items, 1, item.mod_data.backend_id) -- Add item backend to the list of items created this session
+			
+			-- Commented out since saved items are automatically given a delete command anyway
+			--mod.add_delete_weapon_command(item.mod_data.backend_id) -- Create a chat command to delete the specified item
 		end
 	end
 end)
