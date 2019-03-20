@@ -11,7 +11,7 @@ Has bare bones functionality: when an item is created using GiveWeapon, it's sav
 
 Open it and ctrl+f "saved_items" to see your entries. Editing it while in-game is unlikely to work too well.
 
-The items in this list are loaded/created on game start. The command "/saveweapon_load" will also load/create the items in the list. There are currently no checks in place to ensure the same item isn't created multiple times.
+The items in this list are loaded/created on game start.
  
  
 # Changelog
