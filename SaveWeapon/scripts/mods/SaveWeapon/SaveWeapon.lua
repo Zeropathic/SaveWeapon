@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.05
+	 v. 0.06
 
 
 
@@ -69,7 +69,53 @@ if not mod.created_items then -- Contingency to prevent reloading the mods from 
 end
 
 
+--	_________________
+--	* CHAT COMMANDS *
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+--	/saveweapon_load
+-- Forcibly loads your saved items, should you need to do so for whatever reason.
+mod:command("saveweapon_load", "Load all saved GiveWeapon items", function()
+	mod.load_items()
+end)
+
 --[[
+mod:command("sw_delete_last", "Deletes the last created item from GiveWeapon from the game.", function()
+	
+end)
+]]--
+
+-- /sw_delete_%weapon_name%
+mod.add_delete_weapon_command = function(backend_id)
+	local item_id = mod.get_backend_save_id(backend_id)
+	local command_name = "sw_delete_" .. item_id
+	local command_description = ""
+	mod:command(command_name, command_description, function()
+		mod.delete_item(backend_id)
+		mod:command_remove(command_name)
+	end)
+end
+
+
+--	__________________
+--	# DELETING ITEMS #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+-- # Delete created item # --
+-- Deletes a created item, both from your inventory and your save file.
+-- Failsafes in place to make sure you don't mess with regular items.
+mod.delete_item = function(backend_id)
+	mod:echo('[delete_item] I was supposed to delete "' .. tostring(backend_id) .. '" here, but I\'m not sure I can yet.')
+	-- # Help me, Aussiemon, you're my only hope
+end
+
+
+--	_________________
+--	# LOADING ITEMS #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+--[[ 
+	Checks the saved strings and loads the items.
 
 	The saved items look something like this:
 
@@ -86,19 +132,10 @@ end
 	Which might look like this:
 		backend_id = "es_1h_mace_21932_from_SaveWeapon"
 
-]]--
+	The savestring is converted into an array, which looks like this:
 
-
-
-
---	_________________
---	# LOADING ITEMS #
---	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
--- Checks the saved strings and loads the items.
--- The savestring is converted into an array, which looks like this:
---[[
 	Saved item array anatomy:
-		[1] = is favorite
+		[1] = is favorite ("true"/"false")
 		[2] = skin name (Accessories use "nil" here)
 		[3] = trait name
 		[4] = property 1
@@ -203,6 +240,7 @@ mod.load_items = function()
 				mod:hook_enable(ItemHelper, "mark_backend_id_as_favorite")
 			end
 			
+			table.insert(mod.created_items, new_backend_id) -- Add backend ID to the list of items created this session
 			
 			items_loaded = items_loaded + 1
 		else
@@ -221,13 +259,8 @@ mod.load_items = function()
 	end
 end
 
--- Forcibly load items with "/saveweapon_load"
-mod:command("saveweapon_load", "Load all saved GiveWeapon items", function()
-    --mod:echo("command: saveweapon_load")
-	mod.load_items()
-end)
 
--- Load weapons roughly on game start
+-- # Load weapons on game start # --
 -- Need to use this rather than on mods loaded since some of the game stuff used isn't available yet
 mod.on_game_state_changed = function(status, state_name)
 	if status == "enter" 
@@ -244,7 +277,7 @@ end
 --	# SAVING ITEMS #
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
-
+-- # Save an item # --
 -- Saves the item in user_data.config
 mod.save_item = function(backend_id, savestring)
 	local save_id = mod.get_backend_save_id(backend_id)
@@ -253,61 +286,8 @@ mod.save_item = function(backend_id, savestring)
 	mod:set("saved_items", mod.saved_items)
 end
 
-
--- Mark favorite
-mod:hook_safe(ItemHelper, "mark_backend_id_as_favorite", function(backend_id, save)
-	-- Only act if the item comes from this mod or GiveWeapon
-	if mod.is_backend_id_from_mod(backend_id) then
-		--mod:echo('Marked ID \"' .. tostring(backend_id).. '\"')
-		
-		local save_id = mod.get_backend_save_id(backend_id)
-		mod.saved_items[save_id] = mod.savestring_set_favorite(mod.saved_items[save_id], true)
-		
-		-- Save the favorite change
-		mod:set("saved_items", mod.saved_items)
-	end
-end)
-
--- Unmark favorite
-mod:hook_safe(ItemHelper, "unmark_backend_id_as_favorite", function(backend_id)	
-	-- Only act if the item comes from this mod or GiveWeapon
-	if mod.is_backend_id_from_mod(backend_id) then
-		--mod:echo('Unmarked ID \"' .. tostring(backend_id).. '\"')
-		
-		local save_id = mod.get_backend_save_id(backend_id)
-		mod.saved_items[save_id] = mod.savestring_set_favorite(mod.saved_items[save_id], false)
-		
-		-- Save the favorite change
-		mod:set("saved_items", mod.saved_items)
-	end
-end)
-
-
--- On game launch you can have "dead" favorite entries due to the mods. 
--- This should flush them from the list and prevent complications with favorite items. 
--- When done it disables itself, never to run again.
-mod:hook(BackendInterfaceItemPlayfab, "_refresh_items", function(func, self)
-	--mod:echo("Flushing backend IDs...")
-	
-	local favorite_backend_ids = ItemHelper.get_favorite_backend_ids()
-	if favorite_backend_ids then
-		for backend_id, _ in pairs(favorite_backend_ids) do
-			if mod.is_backend_id_from_mod(backend_id) then
-				favorite_backend_ids[backend_id] = nil
-				
-				--mod:echo('Removed backend id \"' .. backend_id .. '\" from favorite_backend_ids')
-			end
-		end
-	end
-	
-	mod:hook_disable(BackendInterfaceItemPlayfab, "_refresh_items")
-	
-	return func(self)
-end)
-
-
--- # MORE ITEMS LIBRARY HOOK # --
--- Hooking MoreItemsLibrary to retreive item data of a created item.
+-- # MoreItemsLibrary create item hook # --
+-- Hooking MoreItemsLibrary to retreive item data of a created item
 mod:hook_safe(mod.more_items_library, "add_mod_items_to_local_backend", function(self, items, mod_name)
 	-- Make sure the new item is created by one of these mods.
 	if mod_name == "GiveWeapon"
@@ -348,7 +328,7 @@ mod:hook_safe(mod.more_items_library, "add_mod_items_to_local_backend", function
 				-- Eventually I want some mod settings to control whether items are autosaved
 				-- For now, any item created by GiveWeapon is saved automatically
 				local backend_id = item.mod_data.backend_id
-				--mod.save_item(backend_id, savestring)
+				mod.save_item(backend_id, savestring)
 				--mod:echo("saved item " .. backend_id)
 			end
 			
@@ -356,9 +336,64 @@ mod:hook_safe(mod.more_items_library, "add_mod_items_to_local_backend", function
 			--mod:echo("backend_id = " .. item.mod_data.backend_id)
 			
 			-- Track created items by adding them to a table. This gets wiped when you quit the game.
-			table.insert(mod.created_items, 1, item.mod_data.backend_id)
+			table.insert(mod.created_items, 1, item.mod_data.backend_id) -- Add item backend to the list of items created this session
 		end
 	end
 end)
 
+
+--	_____________
+--	# FAVORITES #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+-- # Mark favorite # --
+mod:hook_safe(ItemHelper, "mark_backend_id_as_favorite", function(backend_id, save)
+	-- Only act if the item comes from this mod or GiveWeapon
+	if mod.is_backend_id_from_mod(backend_id) then
+		--mod:echo('Marked ID \"' .. tostring(backend_id).. '\"')
+		
+		local save_id = mod.get_backend_save_id(backend_id)
+		mod.saved_items[save_id] = mod.savestring_set_favorite(mod.saved_items[save_id], true)
+		
+		-- Save the favorite change
+		mod:set("saved_items", mod.saved_items)
+	end
+end)
+
+-- # Unmark favorite # --
+mod:hook_safe(ItemHelper, "unmark_backend_id_as_favorite", function(backend_id)	
+	-- Only act if the item comes from this mod or GiveWeapon
+	if mod.is_backend_id_from_mod(backend_id) then
+		--mod:echo('Unmarked ID \"' .. tostring(backend_id).. '\"')
+		
+		local save_id = mod.get_backend_save_id(backend_id)
+		mod.saved_items[save_id] = mod.savestring_set_favorite(mod.saved_items[save_id], false)
+		
+		-- Save the favorite change
+		mod:set("saved_items", mod.saved_items)
+	end
+end)
+
+-- # Flush dead favorites on game start # --
+-- On game launch you can have "dead" favorite entries due to the mods. 
+-- This should flush them from the list and prevent complications with favorite items. 
+-- When done it disables itself, never to run again.
+mod:hook(BackendInterfaceItemPlayfab, "_refresh_items", function(func, self)
+	--mod:echo("Flushing backend IDs...")
+	
+	local favorite_backend_ids = ItemHelper.get_favorite_backend_ids()
+	if favorite_backend_ids then
+		for backend_id, _ in pairs(favorite_backend_ids) do
+			if mod.is_backend_id_from_mod(backend_id) then
+				favorite_backend_ids[backend_id] = nil
+				
+				--mod:echo('Removed backend id \"' .. backend_id .. '\" from favorite_backend_ids')
+			end
+		end
+	end
+	
+	mod:hook_disable(BackendInterfaceItemPlayfab, "_refresh_items") -- Make sure this doesn't run again
+	
+	return func(self)
+end)
 
