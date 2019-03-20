@@ -11,6 +11,10 @@ The items in this list are loaded/created on game start. The command "/saveweapo
  
 # Changelog
 
+**Version 0.06**
+ - Uncommented a line of code that was responsible for running the save function when an item was created (Oopsie)
+ - Rearranged stuff inside SaveWeapon.lua
+
 **Version 0.05**
  - Fixed a bug that prevented accessories from being saved or loaded
 
