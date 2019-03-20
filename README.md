@@ -2,9 +2,9 @@
 Mod that can save weapons that have been created using GiveWeapon.
 
 Command list (use in-game chat):
- */sw_delete_last* (deletes last saved item entry)
- */sw_delete_%item_name%* (auto-fill helps you) (deletes specified item's entry)
- */sw_undo* (undoes last delete action)
+ - */sw_delete_last* (deletes last saved item entry)
+ - */sw_delete_%item_name%* (auto-fill helps you) (deletes specified item's entry)
+ - */sw_undo* (undoes last delete action)
 
 Has bare bones functionality: when an item is created using GiveWeapon, it's saved in: 
  - \Users\YourNameHere\AppData\Roaming\Fatshark\Vermintide 2\user_settings.config
