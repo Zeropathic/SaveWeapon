@@ -16,6 +16,9 @@ The items in this list are loaded/created on game start.
  
 # Changelog
 
+**Version 0.08**
+ - Fixed a crash that would happen if you tried loading a weapon with no skin (This would happen if you used GiveWeapon's "Always use default skins" setting)
+
 **Version 0.07**
  - Added chat commands */sw_delete_last*, */sw_delete_%item_name%* (auto-fill will help you), and */sw_undo*
 
