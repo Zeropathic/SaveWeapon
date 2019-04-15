@@ -16,6 +16,12 @@ The items in this list are loaded/created on game start.
  
 # Changelog
 
+**Version 0.09**
+- Created items should now be fully compatible with Loadout Manager and Weapon Kill Counter. (It sort of worked previously, but only with loaded items - not freshly created ones.)
+- Mod option added for auto-saving.
+- Mod option added for selecting displayed rarity for created and loaded items. Useful for differentiating them from normal items.
+- "/sw_save_%item_name%" command added. Useful if you disable auto-save but want to save an item.
+
 **Version 0.08**
  - Fixed a crash that would happen if you tried loading a weapon with no skin (This would happen if you used GiveWeapon's "Always use default skins" setting)
 
