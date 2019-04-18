@@ -18,6 +18,7 @@ The items in this list are loaded/created on game start.
 
 **Version 0.10**
 - Created items will now stay equipped between game sessions.
+- Small syntax changes (using mod:function() instead of mod.function() across the code)
 
 **Version 0.09**
 - Created items should now be fully compatible with Loadout Manager and Weapon Kill Counter. (It sort of worked previously, but only with loaded items - not freshly created ones.)
