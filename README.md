@@ -25,6 +25,7 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 **Version 0.11**
 - Changed method for equipping saved items; rather than manually equipping them after the player character is loaded, the backend data is modified beforehand so that the game automatically equips the correct items.
 - Some minor code cleanup and commenting.
+- Included source code in the Steam Workshop download.
 
 **Version 0.10**
 - Created items will now stay equipped between game sessions.
