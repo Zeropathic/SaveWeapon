@@ -1,20 +1,30 @@
 # SaveWeapon Beta
-Mod that can save weapons that have been created using GiveWeapon.
+Saves items created with the GiveWeapon mod and loads them into your inventory next time you launch the game.
+
+Compatible with the Loadout Manager and Weapon Kill Counter mods, and also supports inventory favorites (hover an item and press F).
+
+Chat commands are included to offer some control over saved items.
 
 Command list (use in-game chat):
- - */sw_delete_last* (deletes last saved item entry)
- - */sw_delete_%item_name%* (auto-fill helps you) (deletes specified item's entry)
- - */sw_undo* (undoes last delete action)
+ - */sw_save_%item_name%* (saves a specified unsaved item, useful if auto-save is off - start typing and auto-fill will help you)
+ - */sw_delete_last* (deletes last saved item)
+ - */sw_delete_%item_name%* (deletes specified item - auto-fill will show options when you start typing)
+ - */sw_undo* (undoes the last deletion in case you messed up)
 
-Has bare bones functionality: when an item is created using GiveWeapon, it's saved in: 
- - \Users\YourNameHere\AppData\Roaming\Fatshark\Vermintide 2\user_settings.config
+When an item is created using GiveWeapon, it's saved in: 
+ - *\Users\YourNameHere\AppData\Roaming\Fatshark\Vermintide 2\user_settings.config*
 
-Open it and ctrl+f "saved_items" to see your entries. Editing it while in-game is unlikely to work too well.
+Open it and ctrl+f "saved_items" to see your entries. Any edits made while the game is running will likely be overwritten, so if you must change something do so out of game.
 
-The items in this list are loaded/created on game start.
+
+Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helping me out whenever I have questions about coding.
  
- 
+
 # Changelog
+
+**Version 0.11**
+- Changed method for equipping saved items; rather than manually equipping them after the player character is loaded, the backend data is modified beforehand so that the game automatically equips the correct items.
+- Some minor code cleanup and commenting.
 
 **Version 0.10**
 - Created items will now stay equipped between game sessions.
