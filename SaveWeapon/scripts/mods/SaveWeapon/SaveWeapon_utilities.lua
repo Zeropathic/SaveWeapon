@@ -271,9 +271,15 @@ mod.is_property_key_valid(prop_key)
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 -- Items created with GiveWeapon or SaveWeapon have a suffix appended to their backend IDs
--- 	"_from_GiveWeapon"
---	"_from_SaveWeapon" (Obsolete: all items keep GiveWeapon prefix)
+local backend_id_suffixes = {
+	--"_from_SaveWeapon", 	-- Obsolete: all GiveWeapon/SaveWeapon items keep GiveWeapon prefix
+	"_from_GiveWeapon",
+	"_from_AllHats",		-- Used to track whether AllHats items were equipped last session
+}
+
+-- ! OBSOLETE ! --
 -- This function takes the backend ID and returns this string, or an empty string if there is no suffix.
+--[[
 mod.get_backend_id_suffix = function(self, backend_id)
 	local suffix = string.match(backend_id, "_from_GiveWeapon")
 	if not suffix then
@@ -285,11 +291,25 @@ mod.get_backend_id_suffix = function(self, backend_id)
 	--mod:echo('suffix = \"' .. suffix .. '\"')
 	return suffix
 end
+--]]
+
+-- This function takes the backend ID and returns this string, or 'nil' if there is no suffix.
+mod.get_backend_id_suffix = function(self, backend_id)
+	local suffix = nil
+	for i = 1, #backend_id_suffixes, 1 do
+		local str = backend_id_suffixes[i]
+		if string.match(backend_id, str) then
+			suffix = str
+			break
+		end
+	end
+	return suffix
+end
 
 -- Checks if a backend ID is from either the SaveWeapon or GiveWeapon mods and returns a boolean accordingly.
 mod.is_backend_id_from_mod = function(self, backend_id)
 	local suffix = mod:get_backend_id_suffix(backend_id)
-	if suffix == "_from_GiveWeapon" or suffix == "_from_SaveWeapon" then
+	if suffix then
 		return true
 	end
 	return false
@@ -326,6 +346,17 @@ mod.match_backend_id = function(self, backend_id)
 		end
 	end
 	--mod:echo("no match for " .. backend_id)
+	return false
+end
+
+-- # Looks up a backend ID and checks if it corresponds to an actual item # --
+mod.verify_backend_id = function(self, backend_id)
+	local backend_items = Managers.backend:get_interface("items")
+	local item = backend_items:get_item_from_id(backend_id)
+
+	if item then
+		return true
+	end
 	return false
 end
 

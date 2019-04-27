@@ -22,6 +22,9 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 0.12**
+ - Added support for Prop Joe's AllHats mod; equipped hats, portraits, and skins will now be remembered next game launch.
+
 **Version 0.11**
 - Changed method for equipping saved items; rather than manually equipping them after the player character is loaded, the backend data is modified beforehand so that the game automatically equips the correct items.
 - Some minor code cleanup and commenting.

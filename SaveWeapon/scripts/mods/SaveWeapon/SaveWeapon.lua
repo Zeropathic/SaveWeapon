@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.11
+	 v. 0.12
 
 
 
@@ -51,7 +51,6 @@ local MoreItemsLibrary = get_mod("MoreItemsLibrary")
 fassert(GiveWeapon, "SaveWeapon must be lower than GiveWeapon in your launcher's load order.")
 fassert(MoreItemsLibrary, "SaveWeapon must be lower than MoreItemsLibrary in your launcher's load order.")
 
---
 
 -- Create user_settings.config entry if there isn't one
 mod.saved_items = {}
@@ -59,6 +58,16 @@ if not mod:get("saved_items") then
 	mod:set("saved_items", mod.saved_items)
 end
 mod.saved_items = mod:get("saved_items")
+
+
+-- Skins are a bit of a special case. We track equipped skins so that we can keep AllHats skins equipped when relaunching the game
+-- Normal skins, too; due to some weird quirk, skin changes in the modded realm are not remembered when relaunching
+mod.last_skins = {}
+if not mod:get("last_skins") then
+	mod:set("last_skins", mod.last_skins)
+end
+mod.last_skins = mod:get("last_skins")
+
 
 -- When the game launches, data regarding SaveWeapon/GiveWeapon items equipped from last session is temporarily stored here
 -- This data is used to re-equip those items, then the table gets wiped.
@@ -77,7 +86,6 @@ mod.saved_items = mod:get("saved_items")
 	}
 ]]--
 mod.last_session_equipped_items = {}
-mod.character_data = {}
 
 -- When items are created, its backend_id is stored in this table.
 -- Index #1 should be the last created item.
@@ -245,10 +253,10 @@ end
 	The number after the name refers to the item's unique ID.
 	
 	The backend ID of any loaded item is:
-		backend_id = "item_name_IDNUM_from_SaveWeapon"
+		backend_id = "item_name_IDNUM_from_GiveWeapon"
 		
 	Which might look like this:
-		backend_id = "es_1h_mace_21932_from_SaveWeapon"
+		backend_id = "es_1h_mace_21932_from_GiveWeapon"
 
 	The savestring is converted into an array, which looks like this:
 
@@ -459,13 +467,34 @@ mod.set_equipped_backend_items = function(self)
 					loadout[career][slot_name] = backend_id
 				end
 				--]]
+				
+			-- Special case for AllHats cosmetics
+			elseif mod:get_backend_id_suffix(backend_id) == "_from_AllHats" then	
+				-- Not actually doing anything different here
+				backend_items:set_loadout_item(backend_id, career, slot_name)
 			else
-				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID does not match any loaded items (" .. backend_id)
+				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID does not match any loaded items (" .. career .. ": " .. backend_id .. ")")
 			end
 		end
 	end
 end
 
+-- # Set skins equipped on game start # --
+-- Due to the game being weird about skins we need a separate solution for them
+mod.set_equipped_backend_skins = function(self)
+	local backend_items = Managers.backend:get_interface("items")
+	
+	-- We go through all items in 'mod.last_skins' (= 'mod:get("last_skins")') and equip them
+	for career, skin_id in pairs(mod.last_skins) do
+		if mod:verify_backend_id(skin_id) then
+			backend_items:set_loadout_item(skin_id, career, "slot_skin")
+			
+			--mod:echo("Equipped \"" .. skin_id .. "\" for " .. career)
+		else
+			mod:echo("[SaveWeapon][ERROR] Previous session's equipped skin ID is invalid (" .. career .. ": " .. skin_id .. ")")
+		end
+	end
+end
 
 -- # Hook the creation of the item backend # --
 -- We need it to exist before we can load our custom items
@@ -479,8 +508,23 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	-- This hook runs before the player model is loaded
 	-- set_equipped_backend_items will set our custom items as equipped, so that when the player loads they'll already have our items in hand
 	mod:set_equipped_backend_items()
+	-- ... and set_equipped_backend_skins will set skins. Skins are a bit of a special case, so I'm doing them separately.
+	mod:set_equipped_backend_skins()
 	
-	-- Disable the hook after it has served its use (probably not necessary since I don't think the function ever runs again)
+	-- Create a hook to detect when items are equipped
+	-- Its purpose is to see when a skin is equipped (skins are a special case) so we can save its ID and re-equip it on next game launch
+	local backend_items = Managers.backend:get_interface("items")
+	mod:hook_safe(backend_items, "set_loadout_item", function(self, backend_id, career_name, slot_name)
+		--mod:echo("set_loadout_item: \"" .. backend_id .. "\" (" .. slot_name .. ")")
+		
+		-- If the equipped item is a skin, save its backend ID to our table
+		if slot_name == "slot_skin" then
+			mod.last_skins[career_name] = backend_id
+			mod:set("last_skins", mod.last_skins)
+		end
+	end)
+	
+	-- Disable this hook after it has served its use (probably not necessary since I don't think the function ever runs again)
 	mod:hook_disable(BackendManagerPlayFab, "_create_interfaces")
 end)
 
@@ -498,12 +542,20 @@ local item_slot_list = {
 	"slot_necklace",
 	"slot_trinket_1",
 	"slot_ring",
+	
+	-- For AllHats mod
+	"slot_hat",
+	--"slot_skin",	-- Skins are a weird and special case
+	"slot_frame",
 }
+-- Yes, it really is written "inital" in the source code
 mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, character_id, character_data)
 	local career_name = self._career_lookup[character_id]
 	
 	-- This table saves custom item backend ID's for the specific character
 	local load_items = {}
+	
+	
 	
 	-- Cut-down version of the original function's loop
 	-- We're just checking if a slot has a ghost ID from one of our items
@@ -512,6 +564,12 @@ mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, characte
 		
 		if character_data[slot_name] and character_data[slot_name].Value then
 			local value = character_data[slot_name].Value
+			if slot_name == "slot_skin" then
+				-- AllHats skins' ID don't end up here somehow?
+				mod:echo("slot_skin == " .. value)
+				
+				mod:dump(character_data[slot_name], "SKIN_DUMP_" .. career_name, 4)
+			end
 			-- If the backend ID is ours, keep track of it for later
 			if mod:is_backend_id_from_mod(value) then
 				load_items[slot_name] = value
@@ -523,7 +581,6 @@ mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, characte
 	-- Only insert if anything's been put into 'load_items', no need to clutter the table
 	if next(load_items) then
 		mod.last_session_equipped_items[career_name] = load_items
-		mod.character_data[career_name] = character_data
 	end
 
 	return func(self, character_id, character_data)
@@ -649,6 +706,7 @@ mod:hook(BackendInterfaceItemPlayfab, "_refresh_items", function(func, self)
 	
 	return func(self)
 end)
+
 
 --	_________________
 --	# CHANGE RARITY #
