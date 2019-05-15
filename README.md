@@ -1,4 +1,4 @@
-# SaveWeapon Beta
+# SaveWeapon
 Saves items created with the GiveWeapon mod and loads them into your inventory next time you launch the game.
 
 Compatible with the Loadout Manager and Weapon Kill Counter mods, and also supports inventory favorites (hover an item and press F).
