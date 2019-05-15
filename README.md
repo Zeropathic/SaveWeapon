@@ -6,8 +6,9 @@ Compatible with the Loadout Manager and Weapon Kill Counter mods, and also suppo
 Chat commands are included to offer some control over saved items.
 
 Command list (use in-game chat):
+ - */sw_save_last* (saves the last created unsaved item)
  - */sw_save_%item_name%* (saves a specified unsaved item, useful if auto-save is off - start typing and auto-fill will help you)
- - */sw_delete_last* (deletes last saved item)
+ - */sw_delete_last* (deletes last created item)
  - */sw_delete_%item_name%* (deletes specified item - auto-fill will show options when you start typing)
  - */sw_undo* (undoes the last deletion in case you messed up)
 
@@ -21,6 +22,12 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
  
 
 # Changelog
+
+**Version 1.0**
+ - We're out of beta!
+ - Removed a debug line that dumped some data to the console log; would bloat the log file slightly.
+ - Rewrote some of the code used to load items; savestring parser should be a bit more flexible and less strict about the order of the savestring segments.
+ - The commands to delete weapons now also deletes the custom item from your inventory, as well as from your save file.
 
 **Version 0.12**
  - Added support for Prop Joe's AllHats mod; equipped hats, portraits, and skins will now be remembered next game launch.

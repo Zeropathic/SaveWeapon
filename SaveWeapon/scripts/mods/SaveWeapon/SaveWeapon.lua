@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 0.12
+	 v. 1.0
 
 
 
@@ -23,31 +23,24 @@
 
 	List of commands:
 	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-	 /sw_load_all				-- Loads all saved items
-	 /sw_save_%item_name%		-- Saves the named item. The mod keeps track of unsaved items, and auto-fill will help you.
+	 /sw_save_last				-- Saves the last created unsaved item
+	 /sw_save_%item_name%		-- Saves the named unsaved item; start typing, and auto-fill will help you
 	 /sw_delete_last			-- Deletes the last created item
 	 /sw_delete_%item_name%		-- Deletes the specified item. If you start typing, autofill will kick in and you can choose one
-	 /sw_undo					-- Undoes last deletion. Can be used multiple times, if you deleted multiple items.
+	 /sw_undo					-- Undoes last deletion, can be used multiple times if you deleted multiple items
 
 ]]--
 
 
 local mod = get_mod("SaveWeapon")
-
-
--- Penlight, I guess?
--- Used for an if-check I copied from GiveWeapon, used in the GiveWeapon hook function.
-local pl = require'pl.import_into'()
+local GiveWeapon = get_mod("GiveWeapon")
+local MoreItemsLibrary = get_mod("MoreItemsLibrary")
 
 -- Incorporate a bunch of utility functions tied to this mod
 -- Kept in a separate file to reduce clutter
 mod:dofile("scripts/mods/SaveWeapon/SaveWeapon_utilities")
 
---
-local GiveWeapon = get_mod("GiveWeapon")
-local MoreItemsLibrary = get_mod("MoreItemsLibrary")
-
--- Mod launcher error messages
+-- Error messages
 fassert(GiveWeapon, "SaveWeapon must be lower than GiveWeapon in your launcher's load order.")
 fassert(MoreItemsLibrary, "SaveWeapon must be lower than MoreItemsLibrary in your launcher's load order.")
 
@@ -59,7 +52,6 @@ if not mod:get("saved_items") then
 end
 mod.saved_items = mod:get("saved_items")
 
-
 -- Skins are a bit of a special case. We track equipped skins so that we can keep AllHats skins equipped when relaunching the game
 -- Normal skins, too; due to some weird quirk, skin changes in the modded realm are not remembered when relaunching
 mod.last_skins = {}
@@ -68,19 +60,20 @@ if not mod:get("last_skins") then
 end
 mod.last_skins = mod:get("last_skins")
 
-
--- When the game launches, data regarding SaveWeapon/GiveWeapon items equipped from last session is temporarily stored here
+-- When the game launches, data regarding custom items equipped from last session is temporarily stored here
 -- This data is used to re-equip those items, then the table gets wiped.
--- Table structure looks like so:
+-- Table structure looks like this:
 --[[
 	mod.last_session_equipped_items = {
 		bw_scholar = {
 			slot_melee = %backend_id%
 			slot_ring = %backend_id%
+			slot_hat = %backend_id%
 			...
 		}
 		wh_captain = {
 			slot_ranged = %backend_id%
+			...
 		}
 		...
 	}
@@ -98,9 +91,12 @@ mod.last_saved_items = mod:persistent_table("SaveWeapon_session_last_saved_items
 -- When an item is deleted, its data is stored in this table.
 -- Index #1 is last deleted
 -- Stored tables look like this: 
---		mod.deleted_items[1] = { save_id, savestring }
+--		mod.deleted_items[1] = { save_id, savestring, saved }
 mod.deleted_items = mod:persistent_table("SaveWeapon_session_deleted_items", {})
 
+-- Variable used to track whether the Hero View ('I' screen) is open
+-- Used when properly unequipping an item while it is being deleted
+mod.hero_view = nil
 
 
 --	_________________
@@ -108,23 +104,33 @@ mod.deleted_items = mod:persistent_table("SaveWeapon_session_deleted_items", {})
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 --	/sw_load_all
+-- ! Debug command !
 -- Forcibly loads your saved items, should you need to do so for whatever reason.
 -- There's a chance it might cause bugs with last saved/created items
+--[[
 mod:command("sw_load_all", "Load all saved GiveWeapon items", function()
 	mod:load_items()
 end)
+--]]
 
---	/sw_save_last (n)
--- Saves the last n created items. If no parameter is used, saves the last created item.
--- # UNFINISHED # --
---[[
-mod:command("sw_save_last", "Save last created GiveWeapon item", function()
-	local last_created = mod.created_items[1]
-	local backend_id = last_created.backend_id
-	local savestring = last_created.savestring
-	mod:save_item(backend_id, savestring)
-end)
-]]--
+--	/sw_save_last
+-- Saves the last created item
+mod.update_save_last_command = function(self)
+	local backend_id, index = mod:get_last_unsaved_item()
+	--mod:echo(tostring(backend_id) .. " (" .. tostring(index) .. ")")
+	if not backend_id then
+		return
+	end
+	local item_id = mod:get_backend_save_id(backend_id)
+	local command_description = 'Save last created item ("' .. item_id .. '")'
+	mod:command_remove("sw_save_last")
+	if backend_id then
+		mod:command("sw_save_last", command_description, function()
+			local savestring = mod.created_items[index].savestring
+			mod:save_item(backend_id, savestring)
+		end)
+	end
+end
 
 --	/sw_save_%item_name%
 -- Saves specified item. This command only works for unsaved items.
@@ -142,24 +148,42 @@ mod.add_save_weapon_command = function(self, backend_id, savestring)
 		mod:command_remove(command_name)
 		mod:echo("[SaveWeapon] " .. item_id .. " saved")
 	end)
+	
+	mod:update_save_last_command()
+end
+-- Removes the save command for the specified item
+mod.remove_save_weapon_command = function(self, backend_id)
+	local item_id = mod:get_backend_save_id(backend_id)
+	local command_name = "sw_save_" .. item_id
+	mod:command_remove(command_name)
 end
 
 --	/sw_delete_last
 -- Delete last saved item
-mod:command("sw_delete_last", "Deletes the last saved item from the game", function()
-	local backend_id = mod.last_saved_items[1]
-	if backend_id then
-		-- Remove generated delete chat command
-		local save_id = mod:get_backend_save_id(backend_id)
-		local command_name = "sw_delete_" .. save_id
-		mod:command_remove(command_name)
-		
-		-- Delete the saved entry and remove from created table
-		mod:delete_item(backend_id)
-	else
-		mod:echo("[SaveWeapon] Saved list empty; nothing to delete")
+-- The command's description is updated with the name of the last created item every time one is created
+mod.update_delete_last_command = function(self)
+	local last_item = mod.created_items[1]
+	local backend_id = last_item.backend_id
+	local item_id = mod:get_backend_save_id(backend_id)
+	local command_description = 'Delete last created item ("' .. item_id .. '")'
+	mod:command_remove("sw_delete_last")
+	if last_item then
+		mod:command("sw_delete_last", command_description, function()
+			if backend_id then
+				-- Remove generated delete chat command
+				local save_id = mod:get_backend_save_id(backend_id)
+				local command_name = "sw_delete_" .. save_id
+				mod:command_remove(command_name)
+				
+				-- Delete the saved entry and remove from created table
+				mod:delete_item(backend_id)
+				mod:update_delete_last_command()
+			else
+				mod:echo("[SaveWeapon] Saved list empty; nothing to delete")
+			end
+		end)
 	end
-end)
+end
 
 -- 	/sw_delete_%item_name%
 -- Creates a command named after the item. It's convenient to do it this way since it lets the user use VMF's auto fill functionality.
@@ -167,16 +191,20 @@ end)
 mod.add_delete_weapon_command = function(self, backend_id)
 	local item_id = mod:get_backend_save_id(backend_id)
 	local command_name = "sw_delete_" .. item_id
-	
 	local savestring = mod:separate_item_string(mod.saved_items[item_id])
 	local command_description = savestring[2]
 	for i = 3, #savestring do
 		command_description = command_description .. "/" .. savestring[i]
 	end
+	
+	-- Create the command
 	mod:command(command_name, command_description, function()
 		mod:delete_item(backend_id)
-		mod:command_remove(command_name)
+		mod:command_remove(command_name) -- Command is removed once it has been executed
 	end)
+	
+	-- Update "/sw_delete_last" command
+	mod:update_delete_last_command()
 end
 
 --	/sw_undo
@@ -186,11 +214,23 @@ mod:command("sw_undo", "Undoes the last delete action", function()
 	if deleted_item then
 		local backend_id = deleted_item.backend_id
 		local savestring = deleted_item.savestring
+		local saved = deleted_item.saved
 		
-		mod:save_item(backend_id, savestring)
+		-- Re-create the item
+		mod:create_saved_item(backend_id, savestring)
+		
+		if saved then
+			mod:save_item(backend_id, savestring)
+		end
 		table.remove(mod.deleted_items, 1)
 		
-		mod:echo('[SaveWeapon] \"' .. mod:get_backend_save_id(backend_id) .. '\" restored')
+		local msg = '[SaveWeapon] \"' .. mod:get_backend_save_id(backend_id) .. '\" restored'
+		if saved then
+			msg = msg .. '\" re-created and saved'
+		else
+			msg = msg .. '\" re-created'
+		end
+		mod:echo(msg)
 	else
 		mod:echo("[SaveWeapon] Nothing to undo; nothing has been deleted")
 	end
@@ -203,36 +243,182 @@ end)
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
 -- # Delete created item # --
--- Deletes a created item, both from your inventory (well, not yet) and your save file.
+-- Deletes a created item, both from your inventory and your save file.
 mod.delete_item = function(self, backend_id)
-	local save_id = mod:get_backend_save_id(backend_id)
-	local savestring = mod.saved_items[save_id]
-	local entry = {
-		backend_id = backend_id,
-		savestring = savestring,
-	}
-	table.insert(mod.deleted_items, 1, entry) -- Save last deleted info, in case you want to undo it
+	local saved, savestring = mod:is_item_saved(backend_id)
 	
-	-- Remove item from last_saved_items table
-	for i, str in ipairs(mod.last_saved_items) do
-		if str == backend_id then
-			table.remove(mod.last_saved_items, i)
+	-- Remove item from created_items table
+	for i = 1, #mod.created_items do
+		if mod.created_items[i].backend_id == backend_id then
+			table.remove(mod.created_items, i)
 			break
 		end
 	end
 	
-	-- Remove item from backend (Doesn't remove item if it's currently equipped)
-	-- # Currently has issues I need to sort out, hence this is commented out # --
-	--MoreItemsLibrary:remove_mod_items_from_local_backend({backend_id}, "SaveWeapon")
-	--Managers.backend:get_interface("items"):_refresh() -- Doesn't seem to remove the interface icon. Won't be gone until manual refresh
+	local deleted_entry = {
+		backend_id = backend_id,
+		savestring = savestring,
+		saved = false
+	}
+	if saved then
+		deleted_entry.saved = true
+		
+		-- Remove item from last_saved_items table
+		for i, str in ipairs(mod.last_saved_items) do
+			if str == backend_id then
+				table.remove(mod.last_saved_items, i)
+				break
+			end
+		end
+	else
+		-- If the weapon was not saved, remove the chat command to save it
+		mod:remove_save_weapon_command(backend_id)
+		mod:update_save_last_command()
+	end
 	
+	-- Add item to deleted_items table
+	table.insert(mod.deleted_items, 1, deleted_entry)
+	
+	-- Remove item from backend
+	mod:unequip_item(backend_id)
+	local backend_items = Managers.backend:get_interface("items")
+	backend_items:_refresh()
+	
+	MoreItemsLibrary:remove_mod_items_from_local_backend({backend_id}, "SaveWeapon")
+	
+	local save_id = mod:get_backend_save_id(backend_id)
 	mod.saved_items[save_id] = nil
 	mod:set("saved_items", mod.saved_items)
 	
-	mod:echo('[SaveWeapon] Entry "' .. tostring(backend_id) .. '" deleted from save file.') 
-	mod:echo('(Use "/sw_undo" if you regret deleting it.)')
-	mod:echo("Item is still in inventory, but it will not be loaded next time the game launches.")
+	-- Update inventory UI to remove the deleted item from the listing
+	mod:pcall(function()
+		if GiveWeapon.loadout_inv_view then -- Making use of GiveWeapon's inventory screen tracking
+			local backend_items = Managers.backend:get_interface("items")
+			backend_items:_refresh()
+			local inv_item_grid = GiveWeapon.loadout_inv_view._item_grid
+			if inv_item_grid then
+				inv_item_grid:change_item_filter(inv_item_grid._item_filter, false)
+				inv_item_grid:repopulate_current_inventory_page()
+			end
+		end
+	end)
+	
+	--
+	mod:echo('[SaveWeapon] Deleted "' .. tostring(backend_id) .. '"' .. '\n(Use "/sw_undo" if you regret deleting it.)') 
 end
+
+-- # Unequip item # --
+-- Unequips the specified item from all careers and equips base power 5 items in its place
+mod.unequip_item = function(self, backend_id)
+	local player = Managers.player:local_player()
+	local player_unit = player.player_unit
+	
+	local career_extension = ScriptUnit.extension(player_unit, "career_system")
+	local current_career = career_extension:career_name()
+	
+	local backend_items = Managers.backend:get_interface("items")
+	local item = backend_items:get_item_from_id(backend_id)
+	local base_item_backend_id = mod:find_base_item(item.key)
+	
+	local slot_name = "slot_" .. item.data.slot_type
+	if slot_name == "slot_trinket" then
+		-- I don't know why it be like it is, but it do
+		slot_name = "slot_trinket_1"
+	end
+	local loadouts = backend_items._loadouts
+	
+	-- Cycle through each career to see if the item is equipped on them
+	if base_item_backend_id then
+		for career, loadout in pairs(loadouts) do
+			--mod:echo('career = "' .. tostring(career) .. '", ' .. slot_name .. ' = "' .. loadout[slot_name] .. '"')
+			
+			-- Check to see if the item is the one we're looking for
+			if loadout[slot_name] == backend_id then
+			
+				-- If the HeroView (equipment screen) is open and the currently viewed career is the same as the currently checked career,
+				-- we use a separate method which will properly update the equipped item icons
+				if mod.hero_view and mod.hero_view.career_name == career then
+					local base_item = backend_items:get_item_from_id(base_item_backend_id)
+					local item_slot = mod:convert_slot_name(slot_name)	-- _set_loadout_item takes "melee" instead of "slot_melee" (etc.) so I have to do a small conversion
+					mod.hero_view:_set_loadout_item(base_item, item_slot)
+					
+				-- If we're not in HeroView and the currently played career is the same as the currently checked career,
+				-- we use this method, which ensures the base power item is properly equipped
+				-- Includes a special case for when the current career has the item equipped, and Hero View is open but is displaying a different career
+				elseif ( not mod.hero_view and career == current_career ) 
+				or ( mod.hero_view and career == current_career and mod.hero_view_career_name ~= current_career ) 
+				then
+					backend_items:set_loadout_item(base_item_backend_id, career, slot_name)
+					if slot_name == "slot_ranged" or slot_name == "slot_melee" then
+						local inventory_extension = ScriptUnit.extension(player_unit, "inventory_system")
+						inventory_extension:create_equipment_in_slot(slot_name, base_item_backend_id)
+					else
+						local attachment_extension = ScriptUnit.extension(player_unit, "attachment_system")
+						attachment_extension:create_attachment_in_slot(slot_name, base_item_backend_id)
+					end
+				
+				-- If the currently checked career is not currently played or viewed, we just need to use this to equip the base power item
+				else
+					backend_items:set_loadout_item(base_item_backend_id, career, slot_name)
+				end
+			end
+		end
+	end
+end
+
+-- # Debug function # --
+--  "/unequip slot_melee"
+-- Unequips the item in the specified slot for the currently played career.
+--[[
+mod:command("unequip", "test function", function(which_slot)
+	local player = Managers.player:local_player()
+	local player_unit = player.player_unit
+	local career_extension = ScriptUnit.extension(player_unit, "career_system")
+	local career_name = career_extension:career_name()
+	local backend_items = Managers.backend:get_interface("items")
+	local loadout = backend_items._loadouts[career_name]
+	local slots = {
+		"slot_melee",
+		"slot_ranged",
+		"slot_necklace",
+		"slot_ring",
+		"slot_trinket_1",
+	}
+	if which_slot == "slot_trinket" then
+		which_slot = "slot_trinket_1"
+	end
+	for i = 1, #slots do
+		if which_slot == slots[i] then
+			local slot_name = which_slot
+
+			local equipped_backend_id = loadout[slot_name]
+			local item = backend_items:get_item_from_id(equipped_backend_id)
+			local item_key = item.key
+			
+			--mod:echo(equipped_backend_id)
+			mod:unequip_item(equipped_backend_id)
+			break
+		end
+	end
+end)
+--]]
+
+-- # Hook when the player enters and exits HeroView ("I" screen) # --
+-- We track some variables for use in 'mod.unequip_item'; it needs to know whether this screen is open, in which case special steps are taken to unequip an item
+mod:hook_safe(HeroViewStateOverview, "on_exit", function(self, params)
+	mod.hero_view = nil
+end)
+mod:hook_safe(HeroViewStateOverview, "on_enter", function(self, params)
+	mod.hero_view = self
+	
+	local player = self.player_manager:player_from_peer_id(self.peer_id)
+	local unit = player.player_unit
+	local profile = SPProfiles[FindProfileIndex(self.hero_name)]
+	local career_data = profile.careers[self.career_index]
+	
+	-- I use the career name when re-equipping base power items after deleting a custom item, and this is a very convenient place to store it
+	mod.hero_view.career_name = career_data.name
+end)
 
 
 
@@ -268,179 +454,178 @@ end
 		[5] = property 2
 		[6] = property 3... and so on
 		
-	Item name/type is extrapolated from the saved item key
+	Item name/type is extrapolated from the name of the saved variable
 	
 	Maybe I should put a hard cap at 2 properties, but GiveWeapon doesn't so for now I didn't bother. Theoretically you could have one of each property.
 ]]--
 
--- Loads the saved items
+
+-- # Create saved item # --
+-- Takes an item backend ID and a savestring and creates an item based on it
+-- Returns a table with detailed errors if it for some reason can't create the item
+mod.create_saved_item = function(self, backend_id, savestring)
+	local item_key = mod:get_item_name_from_save_id(backend_id)
+	local savestring_data = mod:parse_savestring(item_key, savestring)
+	
+	if mod:is_item_key_valid(item_key) then
+		local skin = savestring_data.skin
+		if skin == "nil" then
+			skin = nil
+		end
+		
+		local custom_traits = "["
+		for i = 1, #savestring_data.traits do
+			custom_traits = custom_traits .. '\"' .. savestring_data.traits[i] .. '\",'
+		end
+		custom_traits = custom_traits .. "]"
+		
+		local properties = {}
+		for i = 1, #savestring_data.properties do
+			properties[savestring_data.properties[i]] = 1
+		end
+		
+		local custom_properties = "{"
+		for i = 1, #savestring_data.properties do
+			custom_properties = custom_properties..'\"' .. savestring_data.properties[i] .. '\":1,'
+		end
+		custom_properties = custom_properties .. "}"
+		
+		local rarity = mod:get("displayed_rarity")
+		
+		-- Set up item data before using MoreItemsLibrary to create the item
+		local new_backend_id = backend_id
+		local entry = table.clone(ItemMasterList[item_key])
+		entry.mod_data = {
+			backend_id = new_backend_id,
+			ItemInstanceId = new_backend_id,
+			CustomData = {
+				-- traits = "[\"melee_attack_speed_on_crit\", \"melee_timed_block_cost\"]",
+				traits = custom_traits,
+				power_level = "300",
+				properties = custom_properties,
+				rarity = rarity,
+			},
+			rarity = rarity,
+			-- traits = { "melee_timed_block_cost", "melee_attack_speed_on_crit" },
+			traits = table.clone(savestring_data.traits),
+			power_level = 300,
+			properties = properties,
+		}
+		entry.rarity = rarity
+		
+		if skin then
+			entry.mod_data.CustomData.skin = skin
+			entry.mod_data.skin = skin
+			entry.mod_data.inventory_icon = WeaponSkins.skins[skin].inventory_icon
+		end
+		
+		MoreItemsLibrary:add_mod_items_to_local_backend({entry}, "SaveWeapon")
+		Managers.backend:get_interface("items"):make_dirty()
+		Managers.backend:get_interface("items"):_refresh()
+		
+		-- Mark as favorite if the save says so
+		if savestring_data.favorite then
+			-- Disable my hook momentarily so it won't catch this call
+			mod:hook_disable(ItemHelper, "mark_backend_id_as_favorite")
+			ItemHelper.mark_backend_id_as_favorite(new_backend_id)
+			mod:hook_enable(ItemHelper, "mark_backend_id_as_favorite")
+		end
+		
+		--Ghetto fix for the no-skin loaded item crash
+		mod:pcall(function()
+			local backend_items = Managers.backend:get_interface("items")
+			local item = backend_items:get_item_from_id(new_backend_id)
+
+			-- Set item rarity based on mod setting
+			local rarity = mod:get("displayed_rarity")
+			item.rarity = rarity
+			item.data.rarity = rarity
+			item.CustomData.rarity = rarity
+				
+			-- This should only occur if you use GiveWeapon's default skin option.
+			if not skin then
+				item.skin = nil
+			end
+		end)
+		
+		-- Update UI
+		mod:pcall(function()
+			local backend_items = Managers.backend:get_interface("items")
+
+			if GiveWeapon.loadout_inv_view then -- Making use of GiveWeapon's inventory screen tracking
+				backend_items:_refresh()
+				local inv_item_grid = GiveWeapon.loadout_inv_view._item_grid
+				if inv_item_grid then
+					inv_item_grid:change_item_filter(inv_item_grid._item_filter, false)
+					inv_item_grid:repopulate_current_inventory_page()
+				end
+			end
+		end)
+	else
+		local error = '[SaveWeapon][ERROR] Failed to load item \"' .. mod:get_backend_save_id(backend_id) .. '\": invalid item key'
+		mod:echo(error)
+	end
+	if #savestring_data.errors > 0 and mod:is_item_key_valid(item_key) then
+		local error = '[SaveWeapon](' .. mod:get_backend_save_id(backend_id) .. ') Invalid savestring segment'
+		if #savestring_data.errors > 1 then
+			error = error .. 's'
+		end
+		error = error .. ': {'
+		for i = 1, #savestring_data.errors do
+			if i > 1 then
+				error = error .. ', '
+			end
+			error = error .. '\"' .. savestring_data.errors[i] .. '\"'
+		end
+		error = error .. '}'
+		mod:echo(error)
+	end
+
+	return mod:is_item_key_valid(item_key), savestring_data.errors
+end
+
+-- # Loads the saved items # --
 mod.load_items = function(self)
 	--mod:echo("Loading items...")
 	
 	mod.saved_items = mod:get("saved_items")
 	
 	local items_loaded = 0
+	local items_loaded_with_errors = 0
 	local items_failed_to_load = 0
 	
 	for save_id, savestring in pairs(mod.saved_items) do
-		local item_key = mod:get_item_name_from_save_id(save_id)
+		local backend_id = save_id .. "_from_GiveWeapon"
+		local item_created, errors = mod:create_saved_item(backend_id, savestring)
 		
-		local item_strings = mod:separate_item_string(savestring)
+		table.insert(mod.last_saved_items, backend_id) -- Add to last saved (I want to include items loaded on game start in this table)
 		
-		item_strings[3] = mod:trait_name_short2long(item_strings[3]) -- Convert shortened trait name back to its full name
-		
-		local prop_check = true
-		for i = 4, #item_strings do
-			if not mod:is_property_key_valid(item_strings[i]) then
-				prop_check = false
-			end
-		end
-		
-		if mod:is_item_key_valid(item_key)
-		and mod:is_skin_key_valid(item_strings[2], item_key)
-		and mod:is_trait_key_valid(item_strings[3])
-		and prop_check
-		then
-			
-			-- Trying to more or less copy how GiveWeapon uses the items library thing, I don't really know what I'm doing
-			local name = item_key
-			local skin = item_strings[2]
-			if skin == "nil" then
-				skin = nil
-			end
-			
-			local trait = { item_strings[3] }
-			local custom_traits = '[\"' .. item_strings[3] .. '\",]'
-			
-			local properties = {}
-			for i = 4, #item_strings do
-				properties[item_strings[i]] = 1
-			end
-			local custom_properties = "{"
-			for i = 4, #item_strings do
-				custom_properties = custom_properties..'\"' .. item_strings[i] .. '\":1,'
-			end
-			custom_properties = custom_properties .. "}"
-			
-			-- Set up item data before using MoreItemsLibrary to create the item
-			local new_backend_id = save_id .. "_from_GiveWeapon" -- Keep the backend ID from GiveWeapon; this will let loaded items work with LoadoutManager and similar mods.
-			local entry = table.clone(ItemMasterList[name])
-			entry.mod_data = {
-				backend_id = new_backend_id,
-				ItemInstanceId = new_backend_id,
-				CustomData = {
-					-- traits = "[\"melee_attack_speed_on_crit\", \"melee_timed_block_cost\"]",
-					traits = custom_traits,
-					power_level = "300",
-					properties = custom_properties,
-					rarity = "exotic",
-				},
-				rarity = "exotic",
-				-- traits = { "melee_timed_block_cost", "melee_attack_speed_on_crit" },
-				traits = table.clone(trait),
-				power_level = 300,
-				properties = properties,
-			}
-			
-			if skin then
-				entry.mod_data.CustomData.skin = skin
-				entry.mod_data.skin = skin
-				entry.mod_data.inventory_icon = WeaponSkins.skins[skin].inventory_icon
-			end
-			if not skin then
-				skin = nil
-			end
-			
-			local rarity = mod:get("displayed_rarity")
-			entry.rarity = rarity
-			entry.mod_data.rarity = rarity
-			entry.mod_data.CustomData.rarity = rarity
-
-			MoreItemsLibrary:add_mod_items_to_local_backend({entry}, "SaveWeapon")
-			Managers.backend:get_interface("items"):_refresh()
-			
-			-- Mark as favorite if the save says so
-			if item_strings[1] == "true" then
-				-- Disable my hook momentarily so it won't catch this call
-				mod:hook_disable(ItemHelper, "mark_backend_id_as_favorite")
-				ItemHelper.mark_backend_id_as_favorite(new_backend_id)
-				mod:hook_enable(ItemHelper, "mark_backend_id_as_favorite")
-			end
-			
-			table.insert(mod.last_saved_items, new_backend_id) -- Add to last saved (want to include loaded items)
-			mod:add_delete_weapon_command(new_backend_id) -- Chat command to delete the specified item
-			
-			--Ghetto fix for the no-skin loaded item crash
-			mod:pcall(function()
-				local backend_items = Managers.backend:get_interface("items")
-				local item = backend_items:get_item_from_id(new_backend_id)
-
-				-- Set item rarity based on mod setting
-				local rarity = mod:get("displayed_rarity")
-
-				item.rarity = rarity
-				item.data.rarity = rarity
-				item.CustomData.rarity = rarity
-					
-				-- This should only occur if you use GiveWeapon's default skin option.
-				if not skin then
-					item.skin = nil
-				end
-			end)
-			
+		if item_created then
 			items_loaded = items_loaded + 1
+			if #errors > 0 then
+				items_loaded_with_errors = items_loaded_with_errors + 1
+			end
 		else
-			-- Error message in case savestring is invalid for some reason
-			
-			local error_message = '[SaveWeapon][ERROR] Failed to load item \"' .. save_id .. '\": '
-			local errors = 0
-			if not mod:is_item_key_valid(item_key) then
-				error_message = error_message .. "item"
-				errors = errors + 1
-			end
-			if not mod:is_skin_key_valid(item_strings[2], item_key) then
-				if errors > 0 then
-					error_message = error_message .. ", "
-				end
-				error_message = error_message .. "skin"
-				errors = errors + 1
-			end
-			if not mod:is_trait_key_valid(item_strings[3]) then
-				if errors > 0 then
-					error_message = error_message .. ", "
-				end
-				error_message = error_message .. "trait"
-				errors = errors + 1
-			end
-			if not prop_check then
-				if errors > 0 then
-					error_message = error_message .. ", "
-				end
-				error_message = error_message .. "property"
-				errors = errors + 1
-			end
-			
-			if errors > 1 then
-				error_message = error_message .. " keys invalid"
-			elseif errors == 1 then
-				error_message = error_message .. " key invalid"
-			else
-				error_message = error_message .. " ???"
-			end
-			
-			mod:echo(error_message)
-			
 			items_failed_to_load = items_failed_to_load + 1
 		end
 	end
 	
 	-- A little message telling the player how many items were loaded.
-	if items_failed_to_load == 0 then
+	if items_loaded > 0 or items_failed_to_load > 0 then
+		local msg = "[SaveWeapon] "
 		if items_loaded > 0 then
-			mod:echo("[SaveWeapon] " .. items_loaded .. " items loaded")
+			msg = msg .. items_loaded .. " items loaded"
+			if items_loaded_with_errors > 0 then
+				msg = msg .. " (" .. items_loaded_with_errors .. " with errors )"
+			end
 		end
-	else
-		mod:echo("[SaveWeapon] " .. items_loaded .. " items loaded / " .. items_failed_to_load .. " failed")
+		if items_failed_to_load > 0 then
+			if items_loaded > 0 then
+				msg = msg .. " / "
+			end
+			msg = msg .. items_failed_to_load .. " failed"
+		end
+		mod:echo(msg)
 	end
 end
 
@@ -473,7 +658,7 @@ mod.set_equipped_backend_items = function(self)
 				-- Not actually doing anything different here
 				backend_items:set_loadout_item(backend_id, career, slot_name)
 			else
-				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID does not match any loaded items (" .. career .. ": " .. backend_id .. ")")
+				mod:echo("[SaveWeapon][ERROR] Can't find previously equipped item (" .. career .. ": " .. backend_id .. ")")
 			end
 		end
 	end
@@ -555,24 +740,17 @@ mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, characte
 	-- This table saves custom item backend ID's for the specific character
 	local load_items = {}
 	
-	
-	
 	-- Cut-down version of the original function's loop
 	-- We're just checking if a slot has a ghost ID from one of our items
 	for i = 1, #item_slot_list, 1 do
 		local slot_name = item_slot_list[i]
 		
 		if character_data[slot_name] and character_data[slot_name].Value then
-			local value = character_data[slot_name].Value
-			if slot_name == "slot_skin" then
-				-- AllHats skins' ID don't end up here somehow?
-				mod:echo("slot_skin == " .. value)
-				
-				mod:dump(character_data[slot_name], "SKIN_DUMP_" .. career_name, 4)
-			end
+			local backend_id = character_data[slot_name].Value
+			
 			-- If the backend ID is ours, keep track of it for later
-			if mod:is_backend_id_from_mod(value) then
-				load_items[slot_name] = value
+			if mod:is_backend_id_from_mod(backend_id) then
+				load_items[slot_name] = backend_id
 			end
 		end
 	end
@@ -601,8 +779,14 @@ mod.save_item = function(self, backend_id, savestring)
 	table.sort(mod.saved_items)
 	mod:set("saved_items", mod.saved_items)
 	
+	for i = 1, #mod.created_items do
+		if mod.created_items[i].backend_id == backend_id then
+			mod.created_items[i].saved = true
+			break
+		end
+	end
+	
 	table.insert(mod.last_saved_items, backend_id) -- Add to last saved
-	mod:add_delete_weapon_command(backend_id) -- Create a chat command to delete the specified item
 end
 
 -- # MoreItemsLibrary create item hook # --
@@ -626,26 +810,30 @@ mod:hook_safe(MoreItemsLibrary, "add_mod_items_to_local_backend", function(self,
 			local backend_id = item.mod_data.backend_id
 			local savestring = mod:generate_item_string(skin, trait, properties)
 			
-			if mod_name == "GiveWeapon" then
-				-- Only save if auto-save is enabled
-				if mod:get("auto_save") then
-					mod:save_item(backend_id, savestring)
-					
-					--mod:echo("[SaveWeapon] Saved item \"" .. mod:get_backend_save_id(backend_id) .. "\"")
-				else
-					mod:add_save_weapon_command(backend_id, savestring)
-					
-					--mod:echo("[SaveWeapon] Auto-save disabled. Use command \"/sw_save_*item_name*\" to save this item.")
-				end
-			end
-			
 			-- Add item backend to the list of items created this session
 			-- This will catch both newly created (GiveWeapon) and loaded (SaveWeapon) items
 			local created_item_data = {
 				backend_id = backend_id,
 				savestring = savestring,
+				saved = false,
 			}
+			-- Only save the item if it comes from GiveWeapon and auto save is enabled
+			if mod_name == "SaveWeapon" then
+				created_item_data.saved = true
+			elseif mod_name == "GiveWeapon" and mod:get("auto_save") then
+				mod:save_item(backend_id, savestring)
+				created_item_data.saved = true
+			end
+			
 			table.insert(mod.created_items, 1, created_item_data)
+			
+			-- Add command to delete the weapon
+			mod:add_delete_weapon_command(backend_id)
+			
+			-- If the item wasn't saved, create a chat command to save it
+			if created_item_data.saved == false then
+				mod:add_save_weapon_command(backend_id, savestring)
+			end
 		end
 	end
 end)
@@ -706,6 +894,7 @@ mod:hook(BackendInterfaceItemPlayfab, "_refresh_items", function(func, self)
 	
 	return func(self)
 end)
+
 
 
 --	_________________

@@ -100,7 +100,7 @@ mod.trait_name_short2long = function(self, name)
 	return name
 end
 
--- # PARSE SAVESTRING
+-- # SEPARATE SAVESTRING
 -- The savestring is converted into an array, which looks like this:
 --[[
 	Saved item array anatomy:
@@ -125,6 +125,67 @@ mod.separate_item_string = function(self, item_string)
 	
 	return item_strings
 end
+
+-- # PARSE SAVESTRING
+-- Goes through the elements in a savestring and figures out what each one represents, then returns a table with the data we want.
+-- It needs the item_key to check if the skin key is valid 
+-- The returned table looks like this:
+--[[
+	data = {
+		favorite = true or false
+		skin = "skin_name",
+		traits = {
+			"trait_name",
+			"trait_name_2",
+			...
+		},
+		properties = {
+			"property_name",
+			"property_name_2",
+			...
+		},
+		errors = {
+			"unrecognized_string",
+			"If the function can't figure out what a savestring segment means, it'll go here",
+			...
+		},
+	}
+--]]
+mod.parse_savestring = function(self, item_key, item_string)
+	local item_strings = mod:separate_item_string(item_string)
+	local data = {
+		favorite = false,
+		skin = "nil",
+		traits = {},
+		properties = {},
+		errors = {},
+	}
+	for _, str in ipairs(item_strings) do
+		-- String is favorite?
+		if str == "true" or str == "false" then
+			data.favorite = str == "true"
+		elseif mod:is_trait_key_valid(mod:trait_name_short2long(str)) then
+			-- String is trait name?
+			-- Could in theory end up with multiple traits, even though GiveWeapon doesn't support that.
+			-- But if one were to manually edit user_settings it could happen
+			table.insert(data.traits, mod:trait_name_short2long(str))
+		elseif mod:is_property_key_valid(str) then
+			-- String is property name?
+			table.insert(data.properties, str)
+		elseif mod:is_skin_key_valid(str, item_key) or str == "nil" then
+			-- String is skin name? (Or "nil", which can happen if you use GiveWeapon's default skin setting)
+			-- If the savestring for some reason contains multiple skin names, the last one will overwrite the others
+			-- This should only happen if someone meddles with the user_settings file
+			data.skin = str
+		else
+			-- If the string is unrecognizable, pass it on for error handling
+			table.insert(data.errors, str)
+		end
+	end
+	
+	return data
+end
+
 
 -- # GENERATE SAVESTRING
 -- Generates a string for saving the item with
@@ -208,20 +269,15 @@ end
 -- # SKIN KEY CHECK # --
 -- Takes skin name (i.e. "es_1h_mace_skin_02") and item name (i.e. "es_1h_mace") and runs a check to see if they match.
 mod.is_skin_key_valid = function(self, skin_key, item_key)
+	if not mod:is_item_key_valid(item_key) then
+		return false
+	end
 	if skin_key == "nil" or mod:is_item_accessory(item_key) then
 		return true
 	end
 	-- Found this function in "weapon_skins.lua" that does the trick.
 	-- It checks whether a skin key matches a weapon key and returns a boolean accordingly.
-	local b = WeaponSkins.is_matching_skin(item_key, skin_key)
-	--[[
-	if b then
-		mod:echo('skin key \"' .. skin_key .. '\" valid: matches \"' .. item_key .. '\"')
-	else
-		mod:echo('skin key \"' .. skin_key .. '\" invalid')
-	end
-	--]]
-	return b
+	return WeaponSkins.is_matching_skin(item_key, skin_key)
 end
 
 -- # TRAIT KEY CHECK # --
@@ -250,21 +306,21 @@ mod.is_property_key_valid = function(self, prop_key)
 	return false
 end
 
-
-
--- Key check tests
---[[
-local skin_key = "wh_dual_wield_axe_falchion_skin_02"
-local item_key = "wh_dual_wield_axe_falchion"
-local trait_key = "melee_attack_speed_on_crit"
-local prop_key = "crit_chance"
-
-mod.is_item_key_valid(item_key)
-mod.is_skin_key_valid(skin_key, item_key)
-mod.is_trait_key_valid(trait_key)
-mod.is_property_key_valid(prop_key)
-]]--
-
+-- # CONVERT SLOT NAMES/TYPES # --
+local convert_slots_list = {
+	slot_melee = "melee",
+	slot_ranged = "ranged",
+	slot_necklace = "necklace",
+	slot_ring = "ring",
+	slot_trinket_1 = "trinket",
+}
+-- "slot_melee" returns "melee", and so forth
+mod.convert_slot_name = function(self, slot_name)
+	if convert_slots_list[slot_name] then
+		return convert_slots_list[slot_name]
+	end
+	return nil
+end
 
 --	________________________
 --	# BACKEND ID UTILITIES #
@@ -277,23 +333,7 @@ local backend_id_suffixes = {
 	"_from_AllHats",		-- Used to track whether AllHats items were equipped last session
 }
 
--- ! OBSOLETE ! --
--- This function takes the backend ID and returns this string, or an empty string if there is no suffix.
---[[
-mod.get_backend_id_suffix = function(self, backend_id)
-	local suffix = string.match(backend_id, "_from_GiveWeapon")
-	if not suffix then
-		suffix = string.match(backend_id, "_from_SaveWeapon")
-		if not suffix then
-			suffix = ""
-		end
-	end
-	--mod:echo('suffix = \"' .. suffix .. '\"')
-	return suffix
-end
---]]
-
--- This function takes the backend ID and returns this string, or 'nil' if there is no suffix.
+-- This function takes the backend ID and returns the suffix string, or 'nil' if there is no suffix.
 mod.get_backend_id_suffix = function(self, backend_id)
 	local suffix = nil
 	for i = 1, #backend_id_suffixes, 1 do
@@ -358,5 +398,54 @@ mod.verify_backend_id = function(self, backend_id)
 		return true
 	end
 	return false
+end
+
+-- # Find base version of item # --
+-- Takes an item key and returns the backend ID of the basic (power 5) version of the item
+mod.find_base_item = function(self, item_key)
+	-- Since accessory item keys often have a number suffix attached, reduce the string to match the base version that the power 5 items use
+	if string.match(item_key, "trinket") then
+		item_key = "trinket"
+	elseif string.match(item_key, "ring") then
+		item_key = "ring"
+	elseif string.match(item_key, "necklace") then
+		item_key = "necklace"
+	end
+	backend_items = Managers.backend:get_interface("items")
+	for _, item in pairs(backend_items._items) do
+		if item.power_level and item.power_level == 5 then
+			if item.key == item_key then
+				return item.backend_id
+			end
+		end
+	end
+	return false
+end
+
+-- # Looks up whether the item has been saved # --
+-- Returns boolean, as well as the savestring of the item (or 'nil' if false)
+mod.is_item_saved = function(self, backend_id)
+	local saved_items = mod:get("saved_items")
+	local item_id = mod:get_backend_save_id(backend_id)
+	
+	for save_id, savestring in pairs(saved_items) do
+		if save_id == item_id then
+			return true, savestring
+		end
+	end
+	return false, nil
+end
+
+-- # Get last unsaved item # --
+-- Returns the item's backend ID as well as its index in 'mod.created_items'
+mod.get_last_unsaved_item = function(self)
+	local items = mod.created_items
+	for i = 1, #items do
+		--mod:echo("[" .. i .. "] " .. tostring(items[i].backend_id) .. "/" .. tostring(items[i].saved))
+		if items[i] and items[i].saved == false then
+			return items[i].backend_id, i
+		end
+	end
+	return nil, nil
 end
 
