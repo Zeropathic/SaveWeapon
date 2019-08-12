@@ -23,6 +23,9 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.0.1 (WoM hotfix)**
+ - Fixed an issue where, if the inventory view was open and you tried to delete an item equipped by your currently viewed career, the unequipping of the item would fail and it wouldn't be properly deleted.
+
 **Version 1.0**
  - We're out of beta!
  - Removed a debug line that dumped some data to the console log; would bloat the log file slightly.

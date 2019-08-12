@@ -306,21 +306,6 @@ mod.is_property_key_valid = function(self, prop_key)
 	return false
 end
 
--- # CONVERT SLOT NAMES/TYPES # --
-local convert_slots_list = {
-	slot_melee = "melee",
-	slot_ranged = "ranged",
-	slot_necklace = "necklace",
-	slot_ring = "ring",
-	slot_trinket_1 = "trinket",
-}
--- "slot_melee" returns "melee", and so forth
-mod.convert_slot_name = function(self, slot_name)
-	if convert_slots_list[slot_name] then
-		return convert_slots_list[slot_name]
-	end
-	return nil
-end
 
 --	________________________
 --	# BACKEND ID UTILITIES #

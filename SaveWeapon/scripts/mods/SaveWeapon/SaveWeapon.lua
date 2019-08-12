@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 1.0
+	 v. 1.0.1 (Winds of Magic hotfix)
 
 
 
@@ -339,11 +339,10 @@ mod.unequip_item = function(self, backend_id)
 				-- we use a separate method which will properly update the equipped item icons
 				if mod.hero_view and mod.hero_view.career_name == career then
 					local base_item = backend_items:get_item_from_id(base_item_backend_id)
-					local item_slot = mod:convert_slot_name(slot_name)	-- _set_loadout_item takes "melee" instead of "slot_melee" (etc.) so I have to do a small conversion
-					mod.hero_view:_set_loadout_item(base_item, item_slot)
+					mod.hero_view:_set_loadout_item(base_item, slot_name)	-- (base_item, item_slot)
 					
 				-- If we're not in HeroView and the currently played career is the same as the currently checked career,
-				-- we use this method, which ensures the base power item is properly equipped
+				-- we use this method, which ensures that the base power item is properly equipped
 				-- Includes a special case for when the current career has the item equipped, and Hero View is open but is displaying a different career
 				elseif ( not mod.hero_view and career == current_career ) 
 				or ( mod.hero_view and career == current_career and mod.hero_view_career_name ~= current_career ) 
