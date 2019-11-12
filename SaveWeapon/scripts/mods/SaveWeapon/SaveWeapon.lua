@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 1.0.1 (Winds of Magic hotfix)
+	 v. 1.0.2 (November 2019 hotfix)
 
 
 
@@ -733,9 +733,9 @@ local item_slot_list = {
 	"slot_frame",
 }
 -- Yes, it really is written "inital" in the source code
-mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, character_id, character_data)
-	local career_name = self._career_lookup[character_id]
-	
+mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, career_name, character_data)
+	--local career_name = self._career_lookup[character_id]
+
 	-- This table saves custom item backend ID's for the specific character
 	local load_items = {}
 	
@@ -760,7 +760,7 @@ mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, characte
 		mod.last_session_equipped_items[career_name] = load_items
 	end
 
-	return func(self, character_id, character_data)
+	return func(self, career_name, character_data)
 end)
 
 

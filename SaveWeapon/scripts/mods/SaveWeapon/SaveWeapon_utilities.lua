@@ -180,6 +180,8 @@ mod.parse_savestring = function(self, item_key, item_string)
 		else
 			-- If the string is unrecognizable, pass it on for error handling
 			table.insert(data.errors, str)
+			
+			mod:echo("!ERROR! item_key = {" .. item_key .. "}") -- DEBUG
 		end
 	end
 	
@@ -350,11 +352,19 @@ mod.get_backend_save_id = function(self, backend_id)
 	return save_id
 end
 
--- This one takes a save ID and returns the weapon name
+-- This one takes a save ID or backend ID and returns the item name (i.e. "es_2h_sword")
 mod.get_item_name_from_save_id = function(self, save_id)
 	for key, _ in pairs(ItemMasterList) do
-		item_name = string.match(save_id, key)
+		local item_name = string.match(save_id, key)
 		if item_name then
+			-- If save_id includes "es_2h_sword_executioner" it will still match on "es_2h_sword" and cause havoc, so this is an exception for that specific case.
+			-- Not too elegant (can potentially break if Fatshark changes item names, for some arcane reason), but it's a simple, low-effort solution
+			if item_name == "es_2h_sword" then
+				local exception = string.match(save_id, "es_2h_sword_executioner")
+				if exception then
+					return exception
+				end
+			end
 			return item_name
 		end
 	end

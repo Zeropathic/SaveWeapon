@@ -23,6 +23,10 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.0.2 (Hotfix)**
+ - Fixed an issue that prevented loaded gear from being auto-equipped on game start-up.
+ - The mod was mistaking your created Executioner Swords for Two-Handed Swords when loading items, and the mix-up was causing some issues. This has been fixed.
+
 **Version 1.0.1 (WoM hotfix)**
  - Fixed an issue where, if the inventory view was open and you tried to delete an item equipped by your currently viewed career, the unequipping of the item would fail and it wouldn't be properly deleted.
 
