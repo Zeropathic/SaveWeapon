@@ -4,7 +4,7 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 1.0.2 (November 2019 hotfix)
+	 v. 1.0.3 (Delete item crash fix)
 
 
 
@@ -271,7 +271,7 @@ mod.delete_item = function(self, backend_id)
 			end
 		end
 	else
-		-- If the weapon was not saved, remove the chat command to save it
+		-- If the item was not saved, remove the chat command to save it
 		mod:remove_save_weapon_command(backend_id)
 		mod:update_save_last_command()
 	end
@@ -297,7 +297,11 @@ mod.delete_item = function(self, backend_id)
 			backend_items:_refresh()
 			local inv_item_grid = GiveWeapon.loadout_inv_view._item_grid
 			if inv_item_grid then
-				inv_item_grid:change_item_filter(inv_item_grid._item_filter, false)
+				local index = inv_item_grid._selected_page_index
+				local settings = inv_item_grid._category_settings[index]
+				local item_filter = settings.item_filter
+				
+				inv_item_grid:change_item_filter(item_filter, false)
 				inv_item_grid:repopulate_current_inventory_page()
 			end
 		end

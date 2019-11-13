@@ -23,6 +23,9 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.0.3**
+ - Fixed a potential crash that could occur if you used the 'sw_delete' chat command while the inventory view was open.
+
 **Version 1.0.2 (Hotfix)**
  - Fixed an issue that prevented loaded gear from being auto-equipped on game start-up.
  - The mod was mistaking your created Executioner Swords for Two-Handed Swords when loading items, and the mix-up was causing some issues. This has been fixed.
