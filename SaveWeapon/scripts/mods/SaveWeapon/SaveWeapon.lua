@@ -4,7 +4,10 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 1.0.3 (Delete item crash fix)
+	 v. 1.1 
+	  - Season 3 update
+	  - Fixed a start-up error message with a broken hook
+	  - Equipping of previous items on start-up is currently broken (to be fixed later)
 
 
 
@@ -736,37 +739,42 @@ local item_slot_list = {
 	--"slot_skin",	-- Skins are a weird and special case
 	"slot_frame",
 }
--- Yes, it really is written "inital" in the source code
-mod:hook(PlayFabMirror, "_set_inital_career_data", function(func, self, career_name, character_data)
-	--local career_name = self._career_lookup[character_id]
-
-	-- This table saves custom item backend ID's for the specific character
-	local load_items = {}
-	
-	-- Cut-down version of the original function's loop
-	-- We're just checking if a slot has a ghost ID from one of our items
-	for i = 1, #item_slot_list, 1 do
-		local slot_name = item_slot_list[i]
+-- PlayFabMirror (which is the class I want to access) apparently doesn't exist under that label, so we do some roundabout stuff to get to it
+mod:hook(BackendInterfaceItemPlayfab, "init", function (func, self, backend_mirror)
+	-- "backend_mirror" refers to "PlayFabMirror". And yes, it really is written "inital" in the source code
+	mod:hook(backend_mirror, "_set_inital_career_data", function(func, self, career_name, character_data)
 		
-		if character_data[slot_name] and character_data[slot_name].Value then
-			local backend_id = character_data[slot_name].Value
+		mod:echo("Career: " .. tostring(career_name))
+	
+		-- This table saves custom item backend ID's for the specific character
+		local load_items = {}
+		
+		-- Cut-down version of the original function's loop
+		-- We're just checking if a slot has a ghost ID from one of our items
+		for i = 1, #item_slot_list, 1 do
+			local slot_name = item_slot_list[i]
 			
-			-- If the backend ID is ours, keep track of it for later
-			if mod:is_backend_id_from_mod(backend_id) then
-				load_items[slot_name] = backend_id
+			if character_data[slot_name] and character_data[slot_name].Value then
+				local backend_id = character_data[slot_name].Value
+				
+				-- If the backend ID is ours, keep track of it for later
+				if mod:is_backend_id_from_mod(backend_id) then
+					load_items[slot_name] = backend_id
+				end
 			end
 		end
-	end
 
-	-- Custom backend IDs from the mod are passed on to the public table
-	-- Only insert if anything's been put into 'load_items', no need to clutter the table
-	if next(load_items) then
-		mod.last_session_equipped_items[career_name] = load_items
-	end
+		-- Custom backend IDs from the mod are passed on to the public table
+		-- Only insert if anything's been put into 'load_items', no need to clutter the table
+		if next(load_items) then
+			mod.last_session_equipped_items[career_name] = load_items
+		end
 
-	return func(self, career_name, character_data)
+		return func(self, career_name, character_data)
+	end)
+	
+	return func(self, backend_mirror)
 end)
-
 
 
 --	________________
@@ -935,4 +943,3 @@ mod:hook(GiveWeapon, "create_weapon", function(func, item_type, give_random_skin
 	rarity = mod:get("displayed_rarity")
 	return func(item_type, give_random_skin, rarity, no_skin)
 end)
-
