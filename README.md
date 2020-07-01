@@ -23,6 +23,9 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.1 (Season 3 update)**
+ - Fixed an error with a broken hook on start-up.
+
 **Version 1.0.3**
  - Fixed a potential crash that could occur if you used the 'sw_delete' chat command while the inventory view was open.
 

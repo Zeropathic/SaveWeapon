@@ -1,3 +1,0 @@
-One of Fatshark's recent patches to the game made some changes to the game code that happened to break some of SaveWeapon's functionality. This update aims to make things right again.
-
- - Fixed an issue that prevented loaded gear from being auto-equipped on game start-up.
