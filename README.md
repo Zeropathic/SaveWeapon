@@ -23,6 +23,12 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.2.1**
+ - Added functionality to delete modded items by hovering over them and pressing a hotkey
+ - Added a keybind (see mod menu) to undo the last item deletion, same as "/sw_undo"
+ - Fixed the auto-equipping of previous session's equipped mod items
+ - Added a mod menu setting to toggle the auto-equipping functionality on/off
+
 **Version 1.1 (Season 3 update)**
  - Fixed an error with a broken hook on start-up.
 
