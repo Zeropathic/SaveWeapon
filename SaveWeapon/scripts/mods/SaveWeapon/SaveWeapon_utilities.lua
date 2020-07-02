@@ -13,23 +13,29 @@
 	Index:
 	¯¯¯¯¯
 	 # STRING UTILITIES #
-		trait_name_long2short 		(name)
-		trait_name_short2long 		(name)
-		separate_item_string  		(item_string)
-		generate_item_string  		(name, skin, traits, properties)
-		savestring_set_favorite		(savestring, is_favorite)
+		trait_name_long2short 		(self, name)
+		trait_name_short2long 		(self, name)
+		separate_item_string  		(self, item_string)
+		generate_item_string  		(self, name, skin, traits, properties)
+		savestring_set_favorite		(self, savestring, is_favorite)
 		
 	 # STRING KEY CHECKS #
-		is_item_key_valid 	  		(item_key)
-		is_skin_key_valid 	  		(skin_key, item_key)
-		is_trait_key_valid 	  		(trait_key)
-		is_property_key_valid 		(prop_key)
+		is_item_accessory			(self, item_key)
+		is_item_key_valid 	  		(self, item_key)
+		is_skin_key_valid 	  		(self, skin_key, item_key)
+		is_trait_key_valid 	  		(self, trait_key)
+		is_property_key_valid 		(self, prop_key)
 		
 	 # BACKEND ID UTILITIES #
-		get_backend_id_suffix 	   	(backend_id)
-		is_backend_id_from_mod 	   	(backend_id)
-		get_backend_save_id 	   	(backend_id)
-		get_item_name_from_save_id 	(save_id)
+		get_backend_id_suffix 	   	(self, backend_id)
+		is_backend_id_from_mod 	   	(self, backend_id)
+		get_backend_save_id 	   	(self, backend_id)
+		get_item_name_from_save_id 	(self, save_id)
+		match_backend_id 			(self, backend_id)
+		verify_backend_id 			(self, backend_id)
+		find_base_item 				(self, item_key)
+		is_item_saved 				(self, backend_id)
+		get_last_unsaved_item 		(self)
 	
 ]]--
 
@@ -46,12 +52,12 @@ mod.trait_name_table = {
 	melee_increase_damage_on_block	= "off_balance",
 	melee_reduce_cooldown_on_crit	= "resourceful_combatant",
 	melee_shield_on_assist			= "heroic_intervention",
-	melee_heal_on_crit				= "melee_heal_on_crit", -- What's this?
+	melee_heal_on_crit				= "melee_heal_on_crit", -- Unused - holdover of Regrowth from Verm 1?
 	
 	ranged_restore_stamina_headshot				= "inspirational_shot",
 	ranged_replenish_ammo_headshot				= "conservative_shooter",
 	ranged_reduce_cooldown_on_crit				= "resourceful_sharpshooter",
-	ranged_replenish_ammo_on_crit				= "ranged_replenish_ammo_on_crit", -- ??
+	ranged_replenish_ammo_on_crit				= "ranged_replenish_ammo_on_crit", -- Unused - Scavenger holdover?
 	ranged_increase_power_level_vs_armour_crit	= "hunter",
 	ranged_consecutive_hits_increase_power		= "barrage",
 	ranged_movespeed_on_damage_taken			= "adrenaline_rush",
@@ -230,6 +236,23 @@ end
 --	# STRING KEY CHECKS #
 --	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
 
+-- # IS ACCESSORY CHECK # --
+-- Takes the item key/name (i.e. "es_1h_mace") and sees if it's a necklace, ring (charm), or trinket
+mod.is_item_accessory = function(self, item_key)
+	for key, item in pairs(ItemMasterList) do
+		if key == item_key then
+			if item.slot_type == "necklace"
+			or item.slot_type == "ring"
+			or item.slot_type == "trinket"
+			then
+				return true
+			end
+			return false
+		end
+	end
+	return false
+end
+
 -- # ITEM KEY CHECK # --
 -- Takes item name (i.e. "es_1h_mace") and runs a check to see if an entry exists in ItemMasterList.
 -- Then it checks if it's an equippable item. If yes, return true.
@@ -250,21 +273,6 @@ mod.is_item_key_valid = function(self, item_key)
 		end
 	end
 	--mod:echo('item key \"' .. item_key .. '\" invalid (not in ItemMasterList)')
-	return false
-end
-
-mod.is_item_accessory = function(self, item_key)
-	for key, item in pairs(ItemMasterList) do
-		if key == item_key then
-			if item.slot_type == "necklace"
-			or item.slot_type == "ring"
-			or item.slot_type == "trinket"
-			then
-				return true
-			end
-			return false
-		end
-	end
 	return false
 end
 

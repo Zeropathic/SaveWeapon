@@ -4,14 +4,16 @@
 	= SAVE WEAPONS =
 	================
 
-	 v. 1.1 
-	  - Season 3 update
-	  - Fixed a start-up error message with a broken hook
-	  - Equipping of previous items on start-up is currently broken (to be fixed later)
+	Version 1.2.1
+	 · I had forgotten to actually let you toggle auto-equipping on game launch on or off. Now you can do so
 
+	Version 1.2
+	 · Added functionality to delete modded items by hovering over them and pressing a hotkey
+	 · Added a keybind (see mod menu) to undo the last item deletion, same as "/sw_undo"
+	 · Fixed the auto-equipping of previous session's equipped mod items
+	 · Added a mod menu setting to toggle the auto-equipping functionality on/off
+	  
 
-
-	
 	Summary:
 	¯¯¯¯¯¯¯
 	This mod saves items created with PropJoe's GiveWeapon mod and loads them up next time you launch the game.
@@ -23,6 +25,20 @@
 	Special thanks to Zaphio, Prop Joe, and others from the Vermintide Modders discord for helping me out whenever I've had questions about coding.
 
 
+	Known issues:
+	¯¯¯¯¯¯¯¯¯¯¯¯
+	 · Deleting (or undoing deletion) of items does not update the inventory grid view properly. 
+	   Instead, you get some weird default sorting algorithm.
+
+
+	List of functionality:
+	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+	 · Saves items created with the GiveWeapon mod and recreates them when you launch the game. 
+	   Auto-save can be toggled off in the mod settings, in which case created items can be saved with a chat command.
+	 · Deletes Save/GiveWeapon items by either hovering the item and pressing the assigned keybind, or by using chat commands.
+	 · (Currently broken) Re-equips previously equipped modded items and cosmetics from last session when you launch the game.
+	 · Undo the last item deletion, bringing the item back. This can be repeated for as many times as you've deleted items.
+	 
 
 	List of commands:
 	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
@@ -34,7 +50,7 @@
 
 ]]--
 
-
+-- Keeping track of the mods we'll be interacting with
 local mod = get_mod("SaveWeapon")
 local GiveWeapon = get_mod("GiveWeapon")
 local MoreItemsLibrary = get_mod("MoreItemsLibrary")
@@ -46,7 +62,6 @@ mod:dofile("scripts/mods/SaveWeapon/SaveWeapon_utilities")
 -- Error messages
 fassert(GiveWeapon, "SaveWeapon must be lower than GiveWeapon in your launcher's load order.")
 fassert(MoreItemsLibrary, "SaveWeapon must be lower than MoreItemsLibrary in your launcher's load order.")
-
 
 -- Create user_settings.config entry if there isn't one
 mod.saved_items = {}
@@ -62,6 +77,29 @@ if not mod:get("last_skins") then
 	mod:set("last_skins", mod.last_skins)
 end
 mod.last_skins = mod:get("last_skins")
+
+-- Keeping track of all mod item equips the same way now, since Season 3 changed something with loadout initialization
+-- Table structure example:
+--[[
+	mod.last_equipped items = {
+		bw_scholar = {
+			slot_melee = %backend_id%
+			slot_ring = %backend_id%
+			slot_hat = %backend_id%
+			...
+		},
+		wh_captain = {
+			slot_ranged = %backend_id%
+			...
+		},
+		...
+	},
+--]]
+mod.last_equipped_items = {}
+if not mod:get("last_equipped_items") then
+	mod:set("last_equipped_items", mod.last_equipped_items)
+end
+mod.last_equipped_items = mod:get("last_equipped_items")
 
 -- When the game launches, data regarding custom items equipped from last session is temporarily stored here
 -- This data is used to re-equip those items, then the table gets wiped.
@@ -97,9 +135,9 @@ mod.last_saved_items = mod:persistent_table("SaveWeapon_session_last_saved_items
 --		mod.deleted_items[1] = { save_id, savestring, saved }
 mod.deleted_items = mod:persistent_table("SaveWeapon_session_deleted_items", {})
 
--- Variable used to track whether the Hero View ('I' screen) is open
--- Used when properly unequipping an item while it is being deleted
-mod.hero_view = nil
+-- Variables used to track whether the Hero View and Inventory screens are open
+mod.hero_view = nil -- The hero overview window - used when properly unequipping an item while it is being deleted
+mod.item_grid = nil	-- The inventory screen's item grid in particular - used for the delete-on-hover hotkey
 
 
 --	_________________
@@ -209,10 +247,15 @@ mod.add_delete_weapon_command = function(self, backend_id)
 	-- Update "/sw_delete_last" command
 	mod:update_delete_last_command()
 end
+-- Removes the delete command for the specified item
+mod.remove_delete_weapon_command = function(self, backend_id)
+	local item_id = mod:get_backend_save_id(backend_id)
+	local command_name = "sw_delete_" .. item_id
+	mod:command_remove(command_name)
+end
 
---	/sw_undo
--- Undoes last delete action
-mod:command("sw_undo", "Undoes the last delete action", function()
+-- # Undo last item deletion # --
+mod.undo_delete = function(self)
 	local deleted_item = mod.deleted_items[1]
 	if deleted_item then
 		local backend_id = deleted_item.backend_id
@@ -237,8 +280,23 @@ mod:command("sw_undo", "Undoes the last delete action", function()
 	else
 		mod:echo("[SaveWeapon] Nothing to undo; nothing has been deleted")
 	end
+end
+
+--	/sw_undo
+-- Undoes last delete action
+mod:command("sw_undo", "Undoes the last delete action", function()
+	mod:undo_delete()
 end)
 
+-- # Undo hotkey pressed # --
+-- When the hotkey defined in mod settings is pressed, this function will run and undo the last deleted item
+mod.undo_delete_keybind_pressed = function()
+	-- A check to see if we're in the inventory screen - if not, there's no reason to continue
+	if not mod.item_grid then
+		return
+	end
+	mod:undo_delete()
+end
 
 
 --	__________________
@@ -279,7 +337,7 @@ mod.delete_item = function(self, backend_id)
 		mod:update_save_last_command()
 	end
 	
-	-- Add item to deleted_items table
+	-- Add item to deleted_items table (in case the user wants to bring it back again with "/sw_undo")
 	table.insert(mod.deleted_items, 1, deleted_entry)
 	
 	-- Remove item from backend
@@ -294,6 +352,8 @@ mod.delete_item = function(self, backend_id)
 	mod:set("saved_items", mod.saved_items)
 	
 	-- Update inventory UI to remove the deleted item from the listing
+	--[[
+	-- Old code
 	mod:pcall(function()
 		if GiveWeapon.loadout_inv_view then -- Making use of GiveWeapon's inventory screen tracking
 			local backend_items = Managers.backend:get_interface("items")
@@ -309,9 +369,53 @@ mod.delete_item = function(self, backend_id)
 			end
 		end
 	end)
+	--]]
+	mod:pcall(function()
+		-- We check if we're in the Item Grid view - if yes, refresh the item backend and repopulate the inventory page
+		if mod.item_grid then
+			local backend_items = Managers.backend:get_interface("items")
+			backend_items:_refresh()
+			
+			-- Repopulating the inventory grid doesn't seem to work properly at the moment
+			-- Instead of staying at the same page with the same items (sans the deleted one) it just seems to sort of reset to some default
+			local index = mod.item_grid._selected_page_index
+			local settings = mod.item_grid._category_settings[index]
+			local item_filter = settings.item_filter
+			mod.item_grid:change_item_filter(item_filter, false)
+			mod.item_grid:repopulate_current_inventory_page()
+		end
+	end)
 	
-	--
-	mod:echo('[SaveWeapon] Deleted "' .. tostring(backend_id) .. '"' .. '\n(Use "/sw_undo" if you regret deleting it.)') 
+	-- Remove the chat command to delete the item
+	self:remove_delete_weapon_command(backend_id)
+	
+	-- Notify the player with a confirmation that the item has been deleted
+	mod:echo('[SaveWeapon] Deleted "' .. tostring(backend_id) .. '"' .. '\n("/sw_undo" to undo)') 
+end
+
+-- # Delete created item on hover # --
+-- When the hotkey defined in mod settings is pressed, this function will run
+-- If a Give- or SaveWeapon item is hovered then, it will be deleted
+mod.delete_item_keybind_pressed = function()
+	-- A check to see if we're in the inventory screen - if not, there's no reason to continue
+	if not mod.item_grid then
+		return
+	end
+	
+	-- Check to see if we're hovering an item at the moment
+	local item = mod.item_grid:get_item_hovered()
+	if not item then
+		return
+	end
+	
+	-- If we passed the previous checks, we should be hovering an item at the moment
+	-- But before we do anything to it, we need to make sure it's from SaveWeapon or GiveWeapon
+	if not mod:is_backend_id_from_mod(item.backend_id) then
+		return
+	end
+	
+	-- Item is from either SaveWeapon or GiveWeapon, else we wouldn't have gotten this far. We're good to go!
+	mod:delete_item(item.backend_id)
 end
 
 -- # Unequip item # --
@@ -424,6 +528,15 @@ mod:hook_safe(HeroViewStateOverview, "on_enter", function(self, params)
 	
 	-- I use the career name when re-equipping base power items after deleting a custom item, and this is a very convenient place to store it
 	mod.hero_view.career_name = career_data.name
+end)
+
+-- # Hook when the player enters and exits the Inventory view # --
+-- We track the item grid (the part where all your items are listed) for use when deleting items by hovering them and pressing a hotkey
+mod:hook_safe(HeroWindowLoadoutInventory, "on_enter", function(hero_window_inventory)
+	mod.item_grid = hero_window_inventory._item_grid
+end)
+mod:hook_safe(HeroWindowLoadoutInventory, "on_exit", function(hero_window_inventory)
+	mod.item_grid = nil
 end)
 
 
@@ -556,15 +669,12 @@ mod.create_saved_item = function(self, backend_id, savestring)
 		
 		-- Update UI
 		mod:pcall(function()
-			local backend_items = Managers.backend:get_interface("items")
-
-			if GiveWeapon.loadout_inv_view then -- Making use of GiveWeapon's inventory screen tracking
+			-- We check if we're in the Item Grid view - if yes, refresh the item backend and repopulate the inventory page
+			if mod.item_grid then
+				local backend_items = Managers.backend:get_interface("items")
 				backend_items:_refresh()
-				local inv_item_grid = GiveWeapon.loadout_inv_view._item_grid
-				if inv_item_grid then
-					inv_item_grid:change_item_filter(inv_item_grid._item_filter, false)
-					inv_item_grid:repopulate_current_inventory_page()
-				end
+				mod.item_grid:change_item_filter(mod.item_grid._item_filter, false)
+				mod.item_grid:repopulate_current_inventory_page()
 			end
 		end)
 	else
@@ -635,7 +745,9 @@ mod.load_items = function(self)
 	end
 end
 
-
+--[=[ =#! OBSOLETE VERSION !#=
+	This functionality is now handled by .set_equipped_items_on_startup
+	
 -- # Set items as equipped on game start # --
 mod.set_equipped_backend_items = function(self)
 	local backend_items = Managers.backend:get_interface("items")
@@ -669,7 +781,9 @@ mod.set_equipped_backend_items = function(self)
 		end
 	end
 end
+--]=]
 
+--[[
 -- # Set skins equipped on game start # --
 -- Due to the game being weird about skins we need a separate solution for them
 mod.set_equipped_backend_skins = function(self)
@@ -686,6 +800,35 @@ mod.set_equipped_backend_skins = function(self)
 		end
 	end
 end
+--]]
+
+-- # Set items equipped on game start # --
+-- This is currently not working
+mod.set_equipped_items_on_startup = function(self)
+	--[[
+		mod.last_equipped_items = {
+			career_name = {
+				slot_name = "backend_id",
+				...
+			},
+			...
+		},
+	--]]
+	local backend_items = Managers.backend:get_interface("items")
+	
+	-- Loop through all career names and lots
+	for career_name, slots in pairs(mod.last_equipped_items) do
+		for slot_name, backend_id in pairs(slots) do
+			if mod:verify_backend_id(backend_id) then
+				backend_items:set_loadout_item(backend_id, career_name, slot_name)
+				
+				--mod:echo("Equipped \"" .. backend_id .. "\" in " .. slot_name .. " for " .. career_name)
+			else
+				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID is invalid (" .. career .. ": " .. backend_id .. ")")
+			end
+		end
+	end
+end
 
 -- # Hook the creation of the item backend # --
 -- We need it to exist before we can load our custom items
@@ -696,23 +839,44 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	-- load_items will read our save data and re-create our items
 	mod:load_items()
 	
+	--[[ =! OBSOLETE != 
 	-- This hook runs before the player model is loaded
 	-- set_equipped_backend_items will set our custom items as equipped, so that when the player loads they'll already have our items in hand
 	mod:set_equipped_backend_items()
+	--]]
 	-- ... and set_equipped_backend_skins will set skins. Skins are a bit of a special case, so I'm doing them separately.
-	mod:set_equipped_backend_skins()
+	--mod:set_equipped_backend_skins()
+	
+	-- Set previously equipped items on game launch
+	if mod:get("auto_equip_on_startup") then
+		mod:set_equipped_items_on_startup()
+	end
 	
 	-- Create a hook to detect when items are equipped
-	-- Its purpose is to see when a skin is equipped (skins are a special case) so we can save its ID and re-equip it on next game launch
+	-- Its purpose is to see when an item is equipped so we can save its ID and re-equip it on next game launch
 	local backend_items = Managers.backend:get_interface("items")
 	mod:hook_safe(backend_items, "set_loadout_item", function(self, backend_id, career_name, slot_name)
-		--mod:echo("set_loadout_item: \"" .. backend_id .. "\" (" .. slot_name .. ")")
+		-- mod:echo("set_loadout_item: \"" .. backend_id .. "\" (" .. slot_name .. ")") -- Debug
 		
 		-- If the equipped item is a skin, save its backend ID to our table
+		--[[
 		if slot_name == "slot_skin" then
 			mod.last_skins[career_name] = backend_id
 			mod:set("last_skins", mod.last_skins)
 		end
+		--]]
+		
+		--
+		-- Track last equipped item's backend ID
+		if not mod.last_equipped_items[career_name] then
+			mod.last_equipped_items[career_name] = {}
+		end
+		mod.last_equipped_items[career_name][slot_name] = backend_id
+		--
+		
+		-- Debug stuff
+		mod:set("last_equipped_items", mod.last_equipped_items)
+		--mod:echo(".last_equipped_items[" .. career_name .. "][" .. slot_name .. "] = " .. tostring(mod.last_equipped_items[career_name][slot_name]))
 	end)
 	
 	-- Disable this hook after it has served its use (probably not necessary since I don't think the function ever runs again)
@@ -720,6 +884,7 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 end)
 
 
+--[[ =#! OBSOLETE !#=
 -- # Catch previous session's equipped GiveWeapon/SaveWeapon items # --
 -- This function runs once for each career on start-up, cycling through equipped items to check if they're broken
 -- Backend ID's of previously equipped items can be caught here, even if the item no longer exists
@@ -736,15 +901,13 @@ local item_slot_list = {
 	
 	-- For AllHats mod
 	"slot_hat",
-	--"slot_skin",	-- Skins are a weird and special case
+	"slot_skin",	-- Skins used to be a weird and special case. Now they all seem to be.
 	"slot_frame",
 }
 -- PlayFabMirror (which is the class I want to access) apparently doesn't exist under that label, so we do some roundabout stuff to get to it
 mod:hook(BackendInterfaceItemPlayfab, "init", function (func, self, backend_mirror)
 	-- "backend_mirror" refers to "PlayFabMirror". And yes, it really is written "inital" in the source code
 	mod:hook(backend_mirror, "_set_inital_career_data", function(func, self, career_name, character_data)
-		
-		mod:echo("Career: " .. tostring(career_name))
 	
 		-- This table saves custom item backend ID's for the specific character
 		local load_items = {}
@@ -775,6 +938,7 @@ mod:hook(BackendInterfaceItemPlayfab, "init", function (func, self, backend_mirr
 	
 	return func(self, backend_mirror)
 end)
+--]]
 
 
 --	________________
