@@ -4,6 +4,9 @@
 	= SAVE WEAPONS =
 	================
 
+	Version 1.2.2
+	 · Fixed broken inventory sorting that would happen if you deleted an item while in the inventory view
+
 	Version 1.2.1
 	 · I had forgotten to actually let you toggle auto-equipping on game launch on or off. Now you can do so
 
@@ -136,8 +139,47 @@ mod.last_saved_items = mod:persistent_table("SaveWeapon_session_last_saved_items
 mod.deleted_items = mod:persistent_table("SaveWeapon_session_deleted_items", {})
 
 -- Variables used to track whether the Hero View and Inventory screens are open
-mod.hero_view = nil -- The hero overview window - used when properly unequipping an item while it is being deleted
-mod.item_grid = nil	-- The inventory screen's item grid in particular - used for the delete-on-hover hotkey
+mod.hero_view = nil 	-- The hero overview window - used when properly unequipping an item while it is being deleted
+mod.item_grid = nil		-- The inventory screen's item grid in particular - used for the delete-on-hover hotkey
+mod.item_filter = nil	-- Used in item_grid's functions to filter out items it doesn't want to display - we use it to refresh the item_grid page
+
+
+
+--	_____________________
+--	# VARIABLE TRACKERS #
+--	¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+-- # Hook when the player enters and exits HeroView ("I" screen) # --
+-- We track some variables for use in 'mod.unequip_item'; it needs to know whether this screen is open, in which case special steps are taken to unequip an item
+mod:hook_safe(HeroViewStateOverview, "on_exit", function(self, params)
+	mod.hero_view = nil
+end)
+mod:hook_safe(HeroViewStateOverview, "on_enter", function(self, params)
+	mod.hero_view = self
+	
+	local player = self.player_manager:player_from_peer_id(self.peer_id)
+	local unit = player.player_unit
+	local profile = SPProfiles[FindProfileIndex(self.hero_name)]
+	local career_data = profile.careers[self.career_index]
+	
+	-- I use the career name when re-equipping base power items after deleting a custom item, and this is a very convenient place to store it
+	mod.hero_view.career_name = career_data.name
+end)
+
+-- # Hook when the player enters and exits the Inventory view # --
+-- We track the item grid (the part where all your items are listed) for use when deleting items by hovering them and pressing a hotkey
+mod:hook_safe(HeroWindowLoadoutInventory, "on_enter", function(hero_window_inventory)
+	mod.item_grid = hero_window_inventory._item_grid
+end)
+mod:hook_safe(HeroWindowLoadoutInventory, "on_exit", function(hero_window_inventory)
+	mod.item_grid = nil
+end)
+
+-- # Track item_grid's last used item_filter
+mod:hook_safe(ItemGridUI, "change_item_filter", function(self, item_filter, change_page)
+	mod.item_filter = item_filter
+end)
+
 
 
 --	_________________
@@ -376,12 +418,9 @@ mod.delete_item = function(self, backend_id)
 			local backend_items = Managers.backend:get_interface("items")
 			backend_items:_refresh()
 			
-			-- Repopulating the inventory grid doesn't seem to work properly at the moment
-			-- Instead of staying at the same page with the same items (sans the deleted one) it just seems to sort of reset to some default
-			local index = mod.item_grid._selected_page_index
-			local settings = mod.item_grid._category_settings[index]
-			local item_filter = settings.item_filter
-			mod.item_grid:change_item_filter(item_filter, false)
+			-- Repopulate the inventory page so that our deleted item's icon is removed from the screen
+			-- If we don't do this, and the player were to try and equip the deleted item, the game would crash (trying to equip a 'nil' item)
+			mod.item_grid:change_item_filter(mod.item_filter, false)
 			mod.item_grid:repopulate_current_inventory_page()
 		end
 	end)
@@ -512,32 +551,6 @@ mod:command("unequip", "test function", function(which_slot)
 	end
 end)
 --]]
-
--- # Hook when the player enters and exits HeroView ("I" screen) # --
--- We track some variables for use in 'mod.unequip_item'; it needs to know whether this screen is open, in which case special steps are taken to unequip an item
-mod:hook_safe(HeroViewStateOverview, "on_exit", function(self, params)
-	mod.hero_view = nil
-end)
-mod:hook_safe(HeroViewStateOverview, "on_enter", function(self, params)
-	mod.hero_view = self
-	
-	local player = self.player_manager:player_from_peer_id(self.peer_id)
-	local unit = player.player_unit
-	local profile = SPProfiles[FindProfileIndex(self.hero_name)]
-	local career_data = profile.careers[self.career_index]
-	
-	-- I use the career name when re-equipping base power items after deleting a custom item, and this is a very convenient place to store it
-	mod.hero_view.career_name = career_data.name
-end)
-
--- # Hook when the player enters and exits the Inventory view # --
--- We track the item grid (the part where all your items are listed) for use when deleting items by hovering them and pressing a hotkey
-mod:hook_safe(HeroWindowLoadoutInventory, "on_enter", function(hero_window_inventory)
-	mod.item_grid = hero_window_inventory._item_grid
-end)
-mod:hook_safe(HeroWindowLoadoutInventory, "on_exit", function(hero_window_inventory)
-	mod.item_grid = nil
-end)
 
 
 
@@ -673,7 +686,8 @@ mod.create_saved_item = function(self, backend_id, savestring)
 			if mod.item_grid then
 				local backend_items = Managers.backend:get_interface("items")
 				backend_items:_refresh()
-				mod.item_grid:change_item_filter(mod.item_grid._item_filter, false)
+				
+				mod.item_grid:change_item_filter(mod.item_filter, false)
 				mod.item_grid:repopulate_current_inventory_page()
 			end
 		end)
@@ -1107,3 +1121,4 @@ mod:hook(GiveWeapon, "create_weapon", function(func, item_type, give_random_skin
 	rarity = mod:get("displayed_rarity")
 	return func(item_type, give_random_skin, rarity, no_skin)
 end)
+

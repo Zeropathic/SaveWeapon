@@ -23,6 +23,9 @@ Special thanks to Zaphio, Prop Joe, and the Vermintide Modders discord for helpi
 
 # Changelog
 
+**Version 1.2.2**
+ - Fixed broken inventory sorting that would happen if you deleted an item while in the inventory view
+
 **Version 1.2.1**
  - Added functionality to delete modded items by hovering over them and pressing a hotkey
  - Added a keybind (see mod menu) to undo the last item deletion, same as "/sw_undo"
