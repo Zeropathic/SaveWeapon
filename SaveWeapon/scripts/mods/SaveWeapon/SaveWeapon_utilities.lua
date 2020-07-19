@@ -186,8 +186,6 @@ mod.parse_savestring = function(self, item_key, item_string)
 		else
 			-- If the string is unrecognizable, pass it on for error handling
 			table.insert(data.errors, str)
-			
-			mod:echo("!ERROR! item_key = {" .. item_key .. "}") -- DEBUG
 		end
 	end
 	
@@ -369,6 +367,11 @@ mod.get_item_name_from_save_id = function(self, save_id)
 			-- Not too elegant (can potentially break if Fatshark changes item names, for some arcane reason), but it's a simple, low-effort solution
 			if item_name == "es_2h_sword" then
 				local exception = string.match(save_id, "es_2h_sword_executioner")
+				if exception then
+					return exception
+				end
+			elseif item_name == "wh_crossbow" then
+				local exception = string.match(save_id, "wh_crossbow_repeater")
 				if exception then
 					return exception
 				end

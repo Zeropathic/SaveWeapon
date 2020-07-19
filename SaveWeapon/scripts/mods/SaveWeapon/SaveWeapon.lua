@@ -4,6 +4,9 @@
 	= SAVE WEAPONS =
 	================
 
+	Version 1.2.3
+	 · Fixed an issue where, when loading items, the mod would think volley crossbows were normal crossbows
+	
 	Version 1.2.2
 	 · Fixed broken inventory sorting that would happen if you deleted an item while in the inventory view
 
@@ -838,7 +841,7 @@ mod.set_equipped_items_on_startup = function(self)
 				
 				--mod:echo("Equipped \"" .. backend_id .. "\" in " .. slot_name .. " for " .. career_name)
 			else
-				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID is invalid (" .. career .. ": " .. backend_id .. ")")
+				mod:echo("[SaveWeapon][ERROR] Previous session's equipped item ID is invalid (" .. career_name .. ": " .. backend_id .. ")")
 			end
 		end
 	end
@@ -857,9 +860,9 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	-- This hook runs before the player model is loaded
 	-- set_equipped_backend_items will set our custom items as equipped, so that when the player loads they'll already have our items in hand
 	mod:set_equipped_backend_items()
-	--]]
 	-- ... and set_equipped_backend_skins will set skins. Skins are a bit of a special case, so I'm doing them separately.
 	--mod:set_equipped_backend_skins()
+	--]]
 	
 	-- Set previously equipped items on game launch
 	if mod:get("auto_equip_on_startup") then
