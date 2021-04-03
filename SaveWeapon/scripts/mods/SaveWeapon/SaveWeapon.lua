@@ -4,6 +4,9 @@
 	= SAVE WEAPONS =
 	================
 
+	Version 1.2.4
+	 · Fixed an issue where, when loading items, the mod would would mistake the Bretonnian Sword & Shield for a regular Sword & Shield
+
 	Version 1.2.3
 	 · Fixed an issue where, when loading items, the mod would think volley crossbows were normal crossbows
 	
@@ -29,12 +32,6 @@
 	Saved items are compatible with Loadout Manager and Weapon Kill Counter.
 	
 	Special thanks to Zaphio, Prop Joe, and others from the Vermintide Modders discord for helping me out whenever I've had questions about coding.
-
-
-	Known issues:
-	¯¯¯¯¯¯¯¯¯¯¯¯
-	 · Deleting (or undoing deletion) of items does not update the inventory grid view properly. 
-	   Instead, you get some weird default sorting algorithm.
 
 
 	List of functionality:

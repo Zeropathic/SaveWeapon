@@ -1,5 +1,8 @@
 # Changelog
 
+**Version 1.2.4**
+ - Fixed an issue where, when loading items, the mod would would mistake the Bretonnian Sword & Shield for a regular Sword & Shield
+
 **Version 1.2.3**
  - Fixed an issue where, when loading items, the mod would think volley crossbows were normal crossbows
 

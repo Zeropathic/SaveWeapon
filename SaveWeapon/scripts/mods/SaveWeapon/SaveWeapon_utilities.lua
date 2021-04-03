@@ -363,7 +363,7 @@ mod.get_item_name_from_save_id = function(self, save_id)
 	for key, _ in pairs(ItemMasterList) do
 		local item_name = string.match(save_id, key)
 		if item_name then
-			-- If save_id includes "es_2h_sword_executioner" it will still match on "es_2h_sword" and cause havoc, so this is an exception for that specific case.
+			-- If save_id includes "es_2h_sword_executioner" it will still match on "es_2h_sword" and cause havoc, so this is an exception for that specific case. Similarly with repeater crossbow and Bretonnian sword & shield.
 			-- Not too elegant (can potentially break if Fatshark changes item names, for some arcane reason), but it's a simple, low-effort solution
 			if item_name == "es_2h_sword" then
 				local exception = string.match(save_id, "es_2h_sword_executioner")
@@ -372,6 +372,11 @@ mod.get_item_name_from_save_id = function(self, save_id)
 				end
 			elseif item_name == "wh_crossbow" then
 				local exception = string.match(save_id, "wh_crossbow_repeater")
+				if exception then
+					return exception
+				end
+			elseif item_name == "es_sword_shield" then
+				local exception = string.match(save_id, "es_sword_shield_breton")
 				if exception then
 					return exception
 				end
