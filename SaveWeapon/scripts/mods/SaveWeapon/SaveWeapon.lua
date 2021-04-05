@@ -4,6 +4,10 @@
 	= SAVE WEAPONS =
 	================
 
+	Version 1.2.5
+	 · Rewrote 'get_item_name_from_save_id' function, which was responsible for the mod confusing Bretonnian Sword & Shield for regular sword & shield, as well as some earlier cases of mistaken identities. The old function needed me to manually add special exceptions in cases where two items shared the first part of their in-code names. This new function catches all cases and should be future-proof.
+	 · Cleaned up some old, unused code.
+
 	Version 1.2.4
 	 · Fixed an issue where, when loading items, the mod would would mistake the Bretonnian Sword & Shield for a regular Sword & Shield
 
@@ -393,25 +397,6 @@ mod.delete_item = function(self, backend_id)
 	mod.saved_items[save_id] = nil
 	mod:set("saved_items", mod.saved_items)
 	
-	-- Update inventory UI to remove the deleted item from the listing
-	--[[
-	-- Old code
-	mod:pcall(function()
-		if GiveWeapon.loadout_inv_view then -- Making use of GiveWeapon's inventory screen tracking
-			local backend_items = Managers.backend:get_interface("items")
-			backend_items:_refresh()
-			local inv_item_grid = GiveWeapon.loadout_inv_view._item_grid
-			if inv_item_grid then
-				local index = inv_item_grid._selected_page_index
-				local settings = inv_item_grid._category_settings[index]
-				local item_filter = settings.item_filter
-				
-				inv_item_grid:change_item_filter(item_filter, false)
-				inv_item_grid:repopulate_current_inventory_page()
-			end
-		end
-	end)
-	--]]
 	mod:pcall(function()
 		-- We check if we're in the Item Grid view - if yes, refresh the item backend and repopulate the inventory page
 		if mod.item_grid then
@@ -514,44 +499,6 @@ mod.unequip_item = function(self, backend_id)
 		end
 	end
 end
-
--- # Debug function # --
---  "/unequip slot_melee"
--- Unequips the item in the specified slot for the currently played career.
---[[
-mod:command("unequip", "test function", function(which_slot)
-	local player = Managers.player:local_player()
-	local player_unit = player.player_unit
-	local career_extension = ScriptUnit.extension(player_unit, "career_system")
-	local career_name = career_extension:career_name()
-	local backend_items = Managers.backend:get_interface("items")
-	local loadout = backend_items._loadouts[career_name]
-	local slots = {
-		"slot_melee",
-		"slot_ranged",
-		"slot_necklace",
-		"slot_ring",
-		"slot_trinket_1",
-	}
-	if which_slot == "slot_trinket" then
-		which_slot = "slot_trinket_1"
-	end
-	for i = 1, #slots do
-		if which_slot == slots[i] then
-			local slot_name = which_slot
-
-			local equipped_backend_id = loadout[slot_name]
-			local item = backend_items:get_item_from_id(equipped_backend_id)
-			local item_key = item.key
-			
-			--mod:echo(equipped_backend_id)
-			mod:unequip_item(equipped_backend_id)
-			break
-		end
-	end
-end)
---]]
-
 
 
 --	_________________
@@ -853,14 +800,6 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	-- load_items will read our save data and re-create our items
 	mod:load_items()
 	
-	--[[ =! OBSOLETE != 
-	-- This hook runs before the player model is loaded
-	-- set_equipped_backend_items will set our custom items as equipped, so that when the player loads they'll already have our items in hand
-	mod:set_equipped_backend_items()
-	-- ... and set_equipped_backend_skins will set skins. Skins are a bit of a special case, so I'm doing them separately.
-	--mod:set_equipped_backend_skins()
-	--]]
-	
 	-- Set previously equipped items on game launch
 	if mod:get("auto_equip_on_startup") then
 		mod:set_equipped_items_on_startup()
@@ -871,14 +810,6 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	local backend_items = Managers.backend:get_interface("items")
 	mod:hook_safe(backend_items, "set_loadout_item", function(self, backend_id, career_name, slot_name)
 		-- mod:echo("set_loadout_item: \"" .. backend_id .. "\" (" .. slot_name .. ")") -- Debug
-		
-		-- If the equipped item is a skin, save its backend ID to our table
-		--[[
-		if slot_name == "slot_skin" then
-			mod.last_skins[career_name] = backend_id
-			mod:set("last_skins", mod.last_skins)
-		end
-		--]]
 		
 		--
 		-- Track last equipped item's backend ID
@@ -896,63 +827,6 @@ mod:hook_safe(BackendManagerPlayFab, "_create_interfaces", function(...)
 	-- Disable this hook after it has served its use (probably not necessary since I don't think the function ever runs again)
 	mod:hook_disable(BackendManagerPlayFab, "_create_interfaces")
 end)
-
-
---[[ =#! OBSOLETE !#=
--- # Catch previous session's equipped GiveWeapon/SaveWeapon items # --
--- This function runs once for each career on start-up, cycling through equipped items to check if they're broken
--- Backend ID's of previously equipped items can be caught here, even if the item no longer exists
--- Thus we have a way to know if a GiveWeapon/SaveWeapon item was used last session
-
--- This check takes place before the items backend exists, so we need to look for traces from equipped items while they're still available
--- This data is then passed on to 'mod.set_equipped_backend_items' via the 'mod.last_session_equipped_items' table
-local item_slot_list = {
-	"slot_ranged",
-	"slot_melee",
-	"slot_necklace",
-	"slot_trinket_1",
-	"slot_ring",
-	
-	-- For AllHats mod
-	"slot_hat",
-	"slot_skin",	-- Skins used to be a weird and special case. Now they all seem to be.
-	"slot_frame",
-}
--- PlayFabMirror (which is the class I want to access) apparently doesn't exist under that label, so we do some roundabout stuff to get to it
-mod:hook(BackendInterfaceItemPlayfab, "init", function (func, self, backend_mirror)
-	-- "backend_mirror" refers to "PlayFabMirror". And yes, it really is written "inital" in the source code
-	mod:hook(backend_mirror, "_set_inital_career_data", function(func, self, career_name, character_data)
-	
-		-- This table saves custom item backend ID's for the specific character
-		local load_items = {}
-		
-		-- Cut-down version of the original function's loop
-		-- We're just checking if a slot has a ghost ID from one of our items
-		for i = 1, #item_slot_list, 1 do
-			local slot_name = item_slot_list[i]
-			
-			if character_data[slot_name] and character_data[slot_name].Value then
-				local backend_id = character_data[slot_name].Value
-				
-				-- If the backend ID is ours, keep track of it for later
-				if mod:is_backend_id_from_mod(backend_id) then
-					load_items[slot_name] = backend_id
-				end
-			end
-		end
-
-		-- Custom backend IDs from the mod are passed on to the public table
-		-- Only insert if anything's been put into 'load_items', no need to clutter the table
-		if next(load_items) then
-			mod.last_session_equipped_items[career_name] = load_items
-		end
-
-		return func(self, career_name, character_data)
-	end)
-	
-	return func(self, backend_mirror)
-end)
---]]
 
 
 --	________________

@@ -1,13 +1,17 @@
 # Changelog
 
+**Version 1.2.5**
+ - Rewrote 'get_item_name_from_save_id' function, which was responsible for the mod confusing Bretonnian Sword & Shield for regular sword & shield, as well as some earlier cases of mistaken identities. The old function needed me to manually add special exceptions in cases where two items shared the first part of their in-code names. This new function catches all cases and should be future-proof.
+ - Cleaned up some old, unused code.
+
 **Version 1.2.4**
- - Fixed an issue where, when loading items, the mod would would mistake the Bretonnian Sword & Shield for a regular Sword & Shield
+ - Fixed an issue where, when loading items, the mod would would mistake the Bretonnian Sword & Shield for a regular Sword & Shield.
 
 **Version 1.2.3**
- - Fixed an issue where, when loading items, the mod would think volley crossbows were normal crossbows
+ - Fixed an issue where, when loading items, the mod would think volley crossbows were normal crossbows.
 
 **Version 1.2.2**
- - Fixed broken inventory sorting that would happen if you deleted an item while in the inventory view
+ - Fixed broken inventory sorting that would happen if you deleted an item while in the inventory view.
 
 **Version 1.2.1**
  - Added functionality to delete modded items by hovering over them and pressing a hotkey

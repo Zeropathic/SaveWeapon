@@ -359,32 +359,27 @@ mod.get_backend_save_id = function(self, backend_id)
 end
 
 -- This one takes a save ID or backend ID and returns the item name (i.e. "es_2h_sword")
+-- The strings passed to it look like this: "bw_1h_crowbill_721938_from_GiveWeapon"
 mod.get_item_name_from_save_id = function(self, save_id)
+	local possible_keys = {}
 	for key, _ in pairs(ItemMasterList) do
 		local item_name = string.match(save_id, key)
 		if item_name then
-			-- If save_id includes "es_2h_sword_executioner" it will still match on "es_2h_sword" and cause havoc, so this is an exception for that specific case. Similarly with repeater crossbow and Bretonnian sword & shield.
-			-- Not too elegant (can potentially break if Fatshark changes item names, for some arcane reason), but it's a simple, low-effort solution
-			if item_name == "es_2h_sword" then
-				local exception = string.match(save_id, "es_2h_sword_executioner")
-				if exception then
-					return exception
-				end
-			elseif item_name == "wh_crossbow" then
-				local exception = string.match(save_id, "wh_crossbow_repeater")
-				if exception then
-					return exception
-				end
-			elseif item_name == "es_sword_shield" then
-				local exception = string.match(save_id, "es_sword_shield_breton")
-				if exception then
-					return exception
-				end
-			end
-			return item_name
+			-- If save_id includes "es_2h_sword_executioner" it will still match on "es_2h_sword" and cause havoc.
+			-- A similar problem can occur with all weapons that share part of their name, of which there are three sets of weapons I know about.
+			-- So to get around this, we instead collect all matches in a table and then return the longest match found at the end.
+			table.insert(possible_keys, item_name)
 		end
 	end
-	return ""
+	
+	-- If we've found any matches, sort them by length and return the longest one
+	-- If both "es_2h_sword" and "es_2h_sword_executioner" are matched, then we know it's the latter (i.e. the longest one) that is correct
+	if #possible_keys > 0 then
+		table.sort(possible_keys, function(a, b) return string.len(a) > string.len(b) end)
+		return possible_keys[1]	-- Longest item name is sorted to the first table index
+	end
+	
+	return "" -- If no matches we return an empty string
 end
 
 -- # Look up a backend ID in created_items table # --
